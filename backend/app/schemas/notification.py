@@ -22,3 +22,18 @@ class NotificationResponse(BaseModel):
 
 class NotificationMarkReadRequest(BaseModel):
     is_read: bool = True
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    endpoint: str
+    created_at: datetime
