@@ -1,0 +1,25 @@
+from fastapi import APIRouter
+
+from app.api.deps import CurrentUser, DbSession
+from app.schemas.analytics import DashboardAnalytics, PeriodAnalytics
+from app.services.analytics.analytics_service import AnalyticsService
+
+router = APIRouter(prefix="/analytics", tags=["Analytics"])
+
+
+@router.get("/dashboard", response_model=DashboardAnalytics)
+async def get_dashboard(current_user: CurrentUser, db: DbSession):
+    service = AnalyticsService(db)
+    return await service.get_dashboard(current_user.id)
+
+
+@router.get("/weekly", response_model=PeriodAnalytics)
+async def get_weekly_analytics(current_user: CurrentUser, db: DbSession):
+    service = AnalyticsService(db)
+    return await service.get_weekly(current_user.id)
+
+
+@router.get("/monthly", response_model=PeriodAnalytics)
+async def get_monthly_analytics(current_user: CurrentUser, db: DbSession):
+    service = AnalyticsService(db)
+    return await service.get_monthly(current_user.id)
