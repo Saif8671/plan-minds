@@ -1,0 +1,10 @@
+2026-08-02 12:09:29,258 | INFO     | main | Starting AI Schedule Organizer v1.0.0 [development]
+2026-08-02 12:09:29,264 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-08-02 12:09:29,266 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-08-02 12:09:29,273 | INFO     | apscheduler.scheduler | Added job "check_upcoming_reminders" to job store "default"
+2026-08-02 12:09:29,275 | INFO     | apscheduler.scheduler | Added job "check_missed_tasks" to job store "default"
+2026-08-02 12:09:29,278 | INFO     | apscheduler.scheduler | Scheduler started
+2026-08-02 12:09:29,280 | INFO     | app.core.scheduler | Background scheduler started
+2026-08-02 12:09:29,292 | INFO     | app.core.scheduler | Background scheduler stopped
+2026-08-02 12:09:29,294 | INFO     | main | Shutting down AI Schedule Organizer
+2026-08-02 12:09:29,297 | INFO     | apscheduler.scheduler | Scheduler has been shut down
