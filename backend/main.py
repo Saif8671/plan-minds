@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -39,6 +41,9 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+from app.core.rate_limit import limiter
+app.state.limiter = limiter
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -54,6 +59,9 @@ async def app_exception_handler(request: Request, exc: AppException):
         status_code=exc.status_code,
         content={"error": exc.message, "details": exc.details},
     )
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.get("/health", tags=["Health"])
