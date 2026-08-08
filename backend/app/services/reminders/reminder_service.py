@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models import Reminder, ReminderType, Task, User
 from app.repositories.reminder_repository import ReminderRepository
 from app.repositories.task_repository import TaskRepository
@@ -36,9 +36,12 @@ class ReminderService:
         reminder = await self.reminder_repo.get_by_id_and_user(reminder_id, user_id)
         if not reminder:
             raise NotFoundError("Reminder")
-        
+
         update_data = data.model_dump(exclude_unset=True)
-        reminder = await self.reminder_repo.update(reminder, obj_in=update_data)
+        for field, value in update_data.items():
+            setattr(reminder, field, value)
+
+        reminder = await self.reminder_repo.update(reminder)
         return ReminderResponse.model_validate(reminder)
 
     async def delete_reminder(self, user_id: UUID, reminder_id: UUID) -> None:
@@ -46,6 +49,36 @@ class ReminderService:
         if not reminder:
             raise NotFoundError("Reminder")
         await self.reminder_repo.delete(reminder)
+
+    async def snooze_reminder(
+        self, user_id: UUID, reminder_id: UUID, snooze_minutes: int = 10
+    ) -> ReminderResponse:
+        reminder = await self.reminder_repo.get_by_id_and_user(reminder_id, user_id)
+        if not reminder:
+            raise NotFoundError("Reminder")
+        if snooze_minutes < 1 or snooze_minutes > 120:
+            raise ValidationError("Snooze duration must be between 1 and 120 minutes")
+
+        reminder.is_snoozed = True
+        reminder.snooze_until = datetime.utcnow() + timedelta(minutes=snooze_minutes)
+        reminder.is_sent = False  # Reset so it fires again
+        reminder.reminder_time = reminder.snooze_until
+
+        reminder = await self.reminder_repo.update(reminder)
+        return ReminderResponse.model_validate(reminder)
+
+    async def complete_reminder(
+        self, user_id: UUID, reminder_id: UUID
+    ) -> ReminderResponse:
+        reminder = await self.reminder_repo.get_by_id_and_user(reminder_id, user_id)
+        if not reminder:
+            raise NotFoundError("Reminder")
+
+        reminder.is_completed = True
+        reminder.is_sent = True
+
+        reminder = await self.reminder_repo.update(reminder)
+        return ReminderResponse.model_validate(reminder)
 
     async def generate_task_reminders(
         self, user: User, tasks: list[Task]
