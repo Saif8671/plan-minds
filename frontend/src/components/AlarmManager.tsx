@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { getTodaySchedule } from '../api';
+import { getTodaySchedule, getReminders, updateReminder } from '../api';
 
 export default function AlarmManager() {
   const [activeAlarm, setActiveAlarm] = useState<{
@@ -36,10 +36,32 @@ export default function AlarmManager() {
             break; // Only trigger one alarm at a time
           }
         }
+
+        // Check reminders from backend
+        const remindersData = await getReminders(0, 50, false).catch(() => null);
+        if (remindersData) {
+          for (const reminder of remindersData) {
+            const reminderTime = new Date(reminder.reminder_time);
+            if (reminderTime <= now && !reminder.is_sent) {
+              triggerAlarm(reminder.title, reminderTime.toLocaleTimeString());
+              // Show browser notification
+              if (Notification.permission === 'granted') {
+                new Notification(reminder.title, { body: reminder.message || 'Reminder' });
+              }
+              // Mark as sent
+              await updateReminder(reminder.id, { is_sent: true }).catch(() => {});
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to check alarms:', err);
       }
     }, 60000); // check every 60 seconds
+
+    // Request notification permission if not asked
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
 
     return () => clearInterval(interval);
   }, []);
