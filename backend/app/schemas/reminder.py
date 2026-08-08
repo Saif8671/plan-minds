@@ -22,6 +22,10 @@ class ReminderUpdate(BaseModel):
     message: str | None = None
 
 
+class ReminderSnoozeRequest(BaseModel):
+    snooze_minutes: int = Field(default=10, ge=1, le=120)
+
+
 class ReminderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,5 +36,8 @@ class ReminderResponse(BaseModel):
     reminder_type: ReminderType
     reminder_time: datetime
     is_sent: bool
+    is_snoozed: bool = False
+    snooze_until: datetime | None = None
+    is_completed: bool = False
     message: str | None = None
     created_at: datetime
