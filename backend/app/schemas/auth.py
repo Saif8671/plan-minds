@@ -49,7 +49,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 class DeleteAccountRequest(BaseModel):
-    password: str
+    password: str | None = None
 
 
 class UserProfileUpdate(BaseModel):
