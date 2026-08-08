@@ -84,6 +84,15 @@ class RecurrenceType(str, enum.Enum):
     CUSTOM = "custom"
 
 
+class RoutineCategory(str, enum.Enum):
+    WORK = "work"
+    STUDY = "study"
+    HEALTH = "health"
+    PERSONAL = "personal"
+    SOCIAL = "social"
+    OTHER = "other"
+
+
 # ─── User ──────────────────────────────────────────────────────────────
 
 
@@ -100,9 +109,7 @@ class User(Base):
     firebase_uid: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
     )
-    google_sub: Mapped[str | None] = mapped_column(
-        String(255), unique=True, index=True
-    )
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(255))
     age: Mapped[int | None] = mapped_column(Integer)
     occupation: Mapped[str | None] = mapped_column(String(255))
@@ -138,6 +145,49 @@ class User(Base):
     ai_analyses: Mapped[list["AIAnalysis"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    preferences: Mapped[Optional["UserPreferences"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+
+
+# ─── UserPreferences ──────────────────────────────────────────────────
+
+
+class UserPreferences(Base):
+    __tablename__ = "user_preferences"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    wake_time: Mapped[time | None] = mapped_column(Time)
+    sleep_time: Mapped[time | None] = mapped_column(Time)
+    work_start: Mapped[time | None] = mapped_column(Time)
+    work_end: Mapped[time | None] = mapped_column(Time)
+    college_start: Mapped[time | None] = mapped_column(Time)
+    college_end: Mapped[time | None] = mapped_column(Time)
+    break_duration_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    preferred_study_time: Mapped[str | None] = mapped_column(String(32))
+    preferred_workout_time: Mapped[str | None] = mapped_column(String(32))
+    notification_preferences: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    working_days: Mapped[list | None] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="preferences")
 
 
 # ─── Schedule ──────────────────────────────────────────────────────────
@@ -205,6 +255,8 @@ class Task(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    labels: Mapped[list | None] = mapped_column(JSONB, default=list)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     priority: Mapped[TaskPriority] = mapped_column(
         Enum(TaskPriority, values_callable=lambda x: [e.value for e in x]),
@@ -272,6 +324,9 @@ class Reminder(Base):
         DateTime(timezone=True), nullable=False
     )
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_snoozed: Mapped[bool] = mapped_column(Boolean, default=False)
+    snooze_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -279,6 +334,28 @@ class Reminder(Base):
 
     user: Mapped["User"] = relationship(back_populates="reminders")
     task: Mapped[Optional["Task"]] = relationship(back_populates="reminders")
+
+
+# ─── PushSubscription ───────────────────────────────────────────────────
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(255), nullable=False)
+    auth: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="push_subscriptions")
 
 
 # ─── Notification ──────────────────────────────────────────────────────
@@ -300,6 +377,7 @@ class Notification(Base):
         default=NotificationType.SYSTEM,
     )
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_delivered: Mapped[bool] = mapped_column(Boolean, default=False)
     data: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -308,7 +386,7 @@ class Notification(Base):
     user: Mapped["User"] = relationship(back_populates="notifications")
 
 
-# ─── Routine (AI) ─────────────────────────────────────────────────────
+# ─── Routine ─────────────────────────────────────────────────────────
 
 
 class Routine(Base):
@@ -321,7 +399,23 @@ class Routine(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
     routine_text: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[RoutineCategory] = mapped_column(
+        Enum(RoutineCategory, values_callable=lambda x: [e.value for e in x]),
+        default=RoutineCategory.OTHER,
+    )
+    priority: Mapped[TaskPriority] = mapped_column(
+        Enum(TaskPriority, values_callable=lambda x: [e.value for e in x]),
+        default=TaskPriority.MEDIUM,
+    )
+    frequency: Mapped[RecurrenceType | None] = mapped_column(
+        Enum(RecurrenceType, values_callable=lambda x: [e.value for e in x]),
+        nullable=True,
+    )
+    estimated_duration: Mapped[int] = mapped_column(Integer, default=60)
+    preferred_time: Mapped[time | None] = mapped_column(Time)
+    tags: Mapped[list | None] = mapped_column(JSONB, default=list)
     parsed_data: Mapped[dict | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
