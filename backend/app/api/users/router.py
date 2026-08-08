@@ -29,6 +29,16 @@ async def update_my_profile(
     return await service.update_profile(current_user.id, data)
 
 
+@router.patch("/me", response_model=UserResponse)
+async def patch_my_profile(
+    data: UserProfileUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = UserService(db)
+    return await service.update_profile(current_user.id, data)
+
+
 @router.put("/me/password", response_model=MessageResponse)
 async def change_password(
     data: ChangePasswordRequest,
@@ -42,10 +52,11 @@ async def change_password(
 
 @router.delete("/me", response_model=MessageResponse)
 async def delete_account(
-    data: DeleteAccountRequest,
     current_user: CurrentUser,
     db: DbSession,
+    data: DeleteAccountRequest | None = None,
 ):
     service = UserService(db)
-    await service.delete_account(current_user.id, data.password)
+    password = data.password if data else None
+    await service.delete_account(current_user.id, password)
     return MessageResponse(message="Account deleted successfully")
