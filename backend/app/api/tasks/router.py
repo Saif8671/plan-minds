@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import CurrentUser, DbSession
 from app.models import TaskStatus
 from app.schemas.auth import PaginatedResponse
-from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.schemas.task import TaskActivityCreate, TaskCreate, TaskResponse, TaskUpdate
 from app.services.tasks.task_service import TaskService
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -52,3 +52,14 @@ async def update_task(
 async def delete_task(task_id: UUID, current_user: CurrentUser, db: DbSession):
     service = TaskService(db)
     await service.delete_task(current_user.id, task_id)
+
+
+@router.post("/{task_id}/activity", status_code=201)
+async def log_task_activity(
+    task_id: UUID,
+    data: TaskActivityCreate,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = TaskService(db)
+    return await service.log_activity(current_user.id, task_id, data.time_spent)
