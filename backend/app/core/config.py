@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +30,17 @@ class Settings(BaseSettings):
     firebase_service_account_path: str = ""
     firebase_service_account_json: str = ""
 
-    groq_api_key: str = Field(default="")
-    groq_model: str = Field(default="llama-3.1-8b-instant")
+    vapid_private_key: str = ""
+    vapid_email: str = "mailto:admin@example.com"
+
+    groq_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GROQ_API_KEY", "OPENAI_API_KEY"),
+    )
+    groq_model: str = Field(
+        default="llama-3.1-8b-instant",
+        validation_alias=AliasChoices("GROQ_MODEL", "OPENAI_MODEL"),
+    )
 
     cors_origins: list[str] = [
         "http://localhost:3000",
@@ -52,6 +61,21 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug", "development", "dev"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "production", "prod"}:
+                return False
+        return bool(value)
 
     @property
     def is_development(self) -> bool:
