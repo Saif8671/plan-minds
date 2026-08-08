@@ -82,7 +82,7 @@ export default function FloatingAssistant() {
 
       const response = await chatAI(text, context);
       setMessages((prev) => [...prev, { role: 'ai', content: response.reply }]);
-    } catch (err) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
