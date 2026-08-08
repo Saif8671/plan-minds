@@ -7,7 +7,7 @@ import {
   Routes,
   useLocation,
 } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
 import { getUnreadCount } from './api';
 import SplashPage from './pages/SplashPage';
 import LoginPage from './pages/LoginPage';
@@ -105,7 +105,7 @@ function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `nav-link${isActive ? 'active' : ''}`
+                  `nav-link ${isActive ? 'active' : ''}`
                 }
               >
                 {item.label}
@@ -121,14 +121,14 @@ function AppLayout() {
               onClick={toggleTheme}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? '☀️' : '🌙'}
+              {theme === 'dark' ? 'Sun' : 'Moon'}
             </button>
             <NavLink
               to="/settings"
               className="notification-bell"
               title="Notifications"
             >
-              🔔
+              Bell
               {unread > 0 && (
                 <span className="notification-badge">
                   {unread > 9 ? '9+' : unread}
