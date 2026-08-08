@@ -167,3 +167,22 @@ export interface AIAnalyzeResponse {
   sleep_time?: string;
   notes?: string;
 }
+
+export interface Reminder {
+  id: string;
+  user_id: string;
+  task_id?: string;
+  title: string;
+  reminder_type: string;
+  reminder_time: string;
+  is_sent: boolean;
+  message?: string;
+  created_at: string;
+}
+
+export interface PushSubscriptionResponse {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  created_at: string;
+}
