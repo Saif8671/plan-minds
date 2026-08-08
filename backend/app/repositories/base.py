@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -28,7 +28,13 @@ class BaseRepository(Generic[ModelType]):
         await self.db.refresh(obj)
         return obj
 
-    async def update(self, obj: ModelType) -> ModelType:
+    async def update(
+        self, obj: ModelType, obj_in: dict[str, Any] | None = None
+    ) -> ModelType:
+        if obj_in:
+            for field, value in obj_in.items():
+                if hasattr(obj, field):
+                    setattr(obj, field, value)
         await self.db.flush()
         await self.db.refresh(obj)
         return obj
