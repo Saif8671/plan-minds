@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getWeekSchedules } from '../api';
 import type { ScheduleResponse } from '../types';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const getLocalDateString = (d = new Date()) => {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
 
 export default function CalendarPage() {
   const [weekStart, setWeekStart] = useState(() => {
@@ -13,7 +17,7 @@ export default function CalendarPage() {
   });
   const [schedules, setSchedules] = useState<ScheduleResponse[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0],
+    getLocalDateString()
   );
   const [selectedSchedule, setSelectedSchedule] =
     useState<ScheduleResponse | null>(null);
@@ -30,7 +34,7 @@ export default function CalendarPage() {
     return dates;
   };
 
-  const loadWeek = async () => {
+  const loadWeek = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -43,11 +47,11 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [weekStart]);
 
   useEffect(() => {
-    loadWeek();
-  }, [weekStart]);
+    void loadWeek();
+  }, [loadWeek]);
 
   useEffect(() => {
     const found = schedules.find((s) => s.date === selectedDate);
@@ -71,11 +75,11 @@ export default function CalendarPage() {
     d.setDate(d.getDate() - d.getDay());
     d.setHours(0, 0, 0, 0);
     setWeekStart(d);
-    setSelectedDate(new Date().toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString());
   };
 
   const weekDates = getWeekDates();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const scheduleDates = new Set(schedules.map((s) => s.date));
   const selectedBlocks = selectedSchedule?.generated_schedule?.blocks ?? [];
   const selectedDateLabel = new Date(
@@ -161,7 +165,7 @@ export default function CalendarPage() {
               </div>
             ))}
             {weekDates.map((date) => {
-              const dateStr = date.toISOString().split('T')[0];
+              const dateStr = getLocalDateString(date);
               const isToday = dateStr === today;
               const isSelected = dateStr === selectedDate;
               const hasSchedule = scheduleDates.has(dateStr);
