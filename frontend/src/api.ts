@@ -9,6 +9,8 @@ import type {
   Task,
   TokenResponse,
   User,
+  Reminder,
+  PushSubscriptionResponse,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
@@ -193,6 +195,13 @@ export async function deleteTask(taskId: string) {
   return authFetch<void>(`/tasks/${taskId}`, { method: 'DELETE' });
 }
 
+export async function logTaskActivity(taskId: string, timeSpent: number) {
+  return authFetch<{ message: string }>(`/tasks/${taskId}/activity`, {
+    method: 'POST',
+    body: JSON.stringify({ time_spent: timeSpent }),
+  });
+}
+
 // ─── Schedules ─────────────────────────────────────────────────────────
 
 export async function createSchedule(data: Partial<Schedule>) {
@@ -307,6 +316,51 @@ export async function markAllNotificationsRead() {
 
 export async function deleteNotification(id: string) {
   return authFetch<void>(`/notifications/${id}`, { method: 'DELETE' });
+}
+
+// ─── Reminders ─────────────────────────────────────────────────────────
+
+export async function getReminders(skip = 0, limit = 50, includeSent = true) {
+  const params = new URLSearchParams({
+    skip: String(skip),
+    limit: String(limit),
+    include_sent: String(includeSent),
+  });
+  return authFetch<Reminder[]>(`/reminders?${params}`);
+}
+
+export async function createReminder(data: Partial<Reminder>) {
+  return authFetch<Reminder>('/reminders', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateReminder(id: string, data: Partial<Reminder>) {
+  return authFetch<Reminder>(`/reminders/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteReminder(id: string) {
+  return authFetch<void>(`/reminders/${id}`, { method: 'DELETE' });
+}
+
+// ─── Push Notifications ────────────────────────────────────────────────
+
+export async function subscribePush(endpoint: string, p256dh: string, auth: string) {
+  return authFetch<PushSubscriptionResponse>('/notifications/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint, p256dh, auth }),
+  });
+}
+
+export async function unsubscribePush(endpoint: string) {
+  const params = new URLSearchParams({ endpoint });
+  return authFetch<void>(`/notifications/push/unsubscribe?${params}`, {
+    method: 'DELETE',
+  });
 }
 
 export { getToken, setToken, clearToken };
