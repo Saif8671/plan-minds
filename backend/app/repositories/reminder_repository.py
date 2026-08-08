@@ -26,6 +26,16 @@ class ReminderRepository(BaseRepository[Reminder]):
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def get_by_id_and_user(
+        self, reminder_id: UUID, user_id: UUID
+    ) -> Reminder | None:
+        result = await self.db.execute(
+            select(Reminder).where(
+                and_(Reminder.id == reminder_id, Reminder.user_id == user_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_pending_before(self, before: datetime) -> list[Reminder]:
         result = await self.db.execute(
             select(Reminder).where(
