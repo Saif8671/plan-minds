@@ -10,6 +10,8 @@ from app.models import RecurrenceType, TaskCategory, TaskPriority, TaskStatus
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
+    notes: str | None = None
+    labels: list[str] | None = None
     priority: TaskPriority = TaskPriority.MEDIUM
     category: TaskCategory = TaskCategory.OTHER
     duration: int = Field(default=60, ge=1, le=1440)
@@ -29,6 +31,8 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    notes: str | None = None
+    labels: list[str] | None = None
     priority: TaskPriority | None = None
     category: TaskCategory | None = None
     duration: int | None = Field(default=None, ge=1, le=1440)
@@ -46,6 +50,10 @@ class TaskUpdate(BaseModel):
     status: TaskStatus | None = None
 
 
+class TaskActivityCreate(BaseModel):
+    time_spent: int = Field(ge=1, description="Time spent in minutes")
+
+
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,6 +62,8 @@ class TaskResponse(BaseModel):
     schedule_id: UUID | None = None
     title: str
     description: str | None = None
+    notes: str | None = None
+    labels: list[str] | None = None
     completed: bool
     priority: TaskPriority
     category: TaskCategory
