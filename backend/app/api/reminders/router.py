@@ -3,7 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.reminder import ReminderCreate, ReminderResponse, ReminderUpdate
+from app.schemas.reminder import (
+    ReminderCreate,
+    ReminderResponse,
+    ReminderSnoozeRequest,
+    ReminderUpdate,
+)
 from app.services.reminders.reminder_service import ReminderService
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
@@ -40,6 +45,29 @@ async def update_reminder(
 ):
     service = ReminderService(db)
     return await service.update_reminder(current_user.id, reminder_id, data)
+
+
+@router.post("/{reminder_id}/snooze", response_model=ReminderResponse)
+async def snooze_reminder(
+    reminder_id: UUID,
+    data: ReminderSnoozeRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = ReminderService(db)
+    return await service.snooze_reminder(
+        current_user.id, reminder_id, data.snooze_minutes
+    )
+
+
+@router.post("/{reminder_id}/complete", response_model=ReminderResponse)
+async def complete_reminder(
+    reminder_id: UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = ReminderService(db)
+    return await service.complete_reminder(current_user.id, reminder_id)
 
 
 @router.delete("/{reminder_id}", status_code=204)
