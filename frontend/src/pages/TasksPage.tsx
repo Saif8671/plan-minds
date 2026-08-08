@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { createTask, deleteTask, getTasks, updateTask } from '../api';
 import type { PaginatedResponse, Task } from '../types';
 
@@ -44,7 +44,7 @@ export default function TasksPage() {
   const [fixedStart, setFixedStart] = useState('');
   const [fixedEnd, setFixedEnd] = useState('');
 
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -55,11 +55,11 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, filterStatus]);
 
   useEffect(() => {
-    loadTasks();
-  }, [page, filterStatus]);
+    void loadTasks();
+  }, [loadTasks]);
 
   const openCreate = () => {
     setEditingTask(null);
@@ -124,15 +124,29 @@ export default function TasksPage() {
   };
 
   const handleToggleComplete = async (task: Task) => {
+    const newCompleted = !task.completed;
+    
+    // Optimistic update
+    if (tasks) {
+      setTasks({
+        ...tasks,
+        items: tasks.items.map((t) =>
+          t.id === task.id
+            ? { ...t, completed: newCompleted, status: newCompleted ? 'completed' : 'pending' as any }
+            : t
+        ),
+      });
+    }
+
     try {
-      const newCompleted = !task.completed;
       await updateTask(task.id, {
         completed: newCompleted,
         status: newCompleted ? 'completed' : 'pending',
       });
-      loadTasks();
     } catch (err) {
       setError((err as Error).message);
+      // Revert on failure
+      void loadTasks();
     }
   };
 
