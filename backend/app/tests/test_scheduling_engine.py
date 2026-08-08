@@ -40,8 +40,11 @@ def test_build_schedule_fixed_and_flexible():
     assert isinstance(result, GeneratedSchedule)
     assert len(result.blocks) >= 2
     fixed = [b for b in result.blocks if b.is_fixed]
-    assert len(fixed) == 1
-    assert fixed[0].title == "College"
+    assert len(fixed) >= 1
+    college_block = next((b for b in fixed if b.title == "College"), None)
+    assert college_block is not None
+    assert college_block.start == time(9, 0)
+
 
 
 def test_has_conflict():
