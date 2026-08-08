@@ -47,14 +47,18 @@ class UserService:
         user.hashed_password = hash_password(new_password)
         await self.user_repo.update(user)
 
-    async def delete_account(self, user_id: UUID, password: str) -> None:
+    async def delete_account(
+        self, user_id: UUID, password: str | None = None
+    ) -> None:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             raise NotFoundError("User")
-        if not user.hashed_password:
-            raise UnauthorizedError("This account does not have a password set")
 
-        if not verify_password(password, user.hashed_password):
-            raise UnauthorizedError("Password is incorrect")
+        # Firebase-only users don't have passwords — allow deletion without one
+        if user.hashed_password:
+            if not password:
+                raise UnauthorizedError("Password is required")
+            if not verify_password(password, user.hashed_password):
+                raise UnauthorizedError("Password is incorrect")
 
         await self.user_repo.delete(user)
