@@ -5,11 +5,8 @@ from datetime import time
 from groq import AsyncGroq
 
 from app.core.config import get_settings
-from app.core.exceptions import ExternalServiceError
 from app.core.logger import get_logger
 from app.schemas.schedule import (
-    ChatRequest,
-    ChatResponse,
     ParsedRoutine,
     ParseRoutineRequest,
 )
@@ -34,6 +31,8 @@ Rules:
 - Infer reasonable defaults when ambiguous
 - "every evening" for gym = flexible task, ~60 min, medium priority
 - College/work with time range = fixed event
+- "need X hours Y" = flexible task with duration X*60, title Y
+- For "revision" or similar without duration, default to 60 minutes
 """
 
 
@@ -48,35 +47,59 @@ class AIRoutineParserService:
         )
 
     async def parse_routine(self, data: ParseRoutineRequest) -> ParsedRoutine:
-        rules_result = self._parse_with_rules(data.routine_text)
-        if not settings.groq_api_key:
-            return rules_result
+        # Try AI first if available, fall back to rules
+        if self.client and settings.groq_api_key:
+            try:
+                return await self._parse_with_ai(data)
+            except Exception as exc:
+                logger.warning("AI parsing failed, falling back to rules: %s", exc)
 
-        if data.routine_text.lower().strip().startswith("use ai"):
-            return await self._parse_with_ai(data)
-
-        return rules_result
+        return self._parse_with_rules(data.routine_text)
 
     async def _parse_with_ai(self, data: ParseRoutineRequest) -> ParsedRoutine:
-        try:
-            response = await self.client.chat.completions.create(
-                model=settings.groq_model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": f"Timezone: {data.timezone}\n\nRoutine:\n{data.routine_text}",
-                    },
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
-            parsed = json.loads(content)
-            return ParsedRoutine.model_validate(parsed)
-        except Exception as exc:
-            logger.warning("AI parsing failed, falling back to rules: %s", exc)
-            return self._parse_with_rules(data.routine_text)
+        max_retries = 2
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=settings.groq_model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": f"Timezone: {data.timezone}\n\nRoutine:\n{data.routine_text}",
+                        },
+                    ],
+                    temperature=0.1,
+                    response_format={"type": "json_object"},
+                )
+                content = response.choices[0].message.content
+                parsed = json.loads(content)
+                result = ParsedRoutine.model_validate(parsed)
+
+                # Validate output quality
+                if not result.fixed_events and not result.flexible_tasks:
+                    if attempt < max_retries:
+                        logger.info("AI returned empty result, retrying...")
+                        continue
+                    # Fall back to rules if AI keeps returning empty
+                    return self._parse_with_rules(data.routine_text)
+
+                return result
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                logger.warning(
+                    "AI returned invalid JSON (attempt %d): %s", attempt + 1, exc
+                )
+            except Exception as exc:
+                last_error = exc
+                logger.warning("AI parsing error (attempt %d): %s", attempt + 1, exc)
+                if attempt == max_retries:
+                    break
+
+        logger.warning("All AI attempts failed, falling back to rules: %s", last_error)
+        return self._parse_with_rules(data.routine_text)
 
     def _parse_with_rules(self, text: str) -> ParsedRoutine:
         text_lower = text.lower()
@@ -101,11 +124,11 @@ class AIRoutineParserService:
         flexible_tasks = []
         duration_patterns = [
             (
-                r"(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+)",
+                r"need\s+(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
                 lambda m: (m.group(2).strip(), int(m.group(1)) * 60),
             ),
             (
-                r"need\s+(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+)",
+                r"(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
                 lambda m: (m.group(2).strip(), int(m.group(1)) * 60),
             ),
             (
@@ -113,6 +136,10 @@ class AIRoutineParserService:
                 lambda m: (m.group(1).strip(), 60),
             ),
             (r"study\s+(\d+)\s*hours?", lambda m: ("Study", int(m.group(1)) * 60)),
+            (
+                r"need\s+revision",
+                lambda m: ("Revision", 60),
+            ),
         ]
         seen_titles = set()
         for pattern, extractor in duration_patterns:
@@ -131,6 +158,29 @@ class AIRoutineParserService:
                             "category": "study",
                         }
                     )
+
+        # Handle standalone "Gym 6PM" pattern
+        gym_match = re.search(
+            r"gym\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", text_lower
+        )
+        if gym_match and "gym" not in [e["title"].lower() for e in fixed_events]:
+            hour = int(gym_match.group(1))
+            minute = int(gym_match.group(2) or 0)
+            ampm = gym_match.group(3)
+            if ampm == "pm" and hour < 12:
+                hour += 12
+            elif not ampm and hour < 12:
+                hour += 12  # Assume PM for gym
+            end_hour = hour + 1  # Default 1 hour
+            if "gym" not in seen_titles:
+                fixed_events.append(
+                    {
+                        "title": "Gym",
+                        "start": time(hour, minute),
+                        "end": time(min(end_hour, 23), minute),
+                        "category": "health",
+                    }
+                )
 
         return ParsedRoutine(
             wake_time=wake_time,
@@ -152,7 +202,7 @@ class AIRoutineParserService:
                     hour += 12
                 elif ampm == "am" and hour == 12:
                     hour = 0
-                elif not ampm and is_sleep and 1 <= hour <= 12:
+                elif not ampm and is_sleep and 1 <= hour < 12:
                     hour = hour + 12 if hour < 12 else hour
                 return time(hour, minute)
         return None
@@ -161,6 +211,3 @@ class AIRoutineParserService:
         if hour < 8:
             hour += 12
         return time(hour, minute)
-
-
-
