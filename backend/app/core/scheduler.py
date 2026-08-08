@@ -11,7 +11,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.database import AsyncSessionLocal
 from app.core.logger import get_logger
-from app.models import Notification, NotificationType, Reminder, Task, TaskStatus
 
 logger = get_logger(__name__)
 
@@ -20,10 +19,13 @@ scheduler = AsyncIOScheduler()
 
 async def check_upcoming_reminders() -> None:
     """Find unsent reminders whose time has arrived and create notifications."""
+    # Lazy imports to avoid circular dependencies at module level
+    from sqlalchemy import and_, select
+
+    from app.models import Notification, NotificationType, Reminder
+
     async with AsyncSessionLocal() as session:
         try:
-            from sqlalchemy import and_, select
-
             now = datetime.now(UTC)
             result = await session.execute(
                 select(Reminder).where(
@@ -49,6 +51,20 @@ async def check_upcoming_reminders() -> None:
                 )
                 session.add(notification)
 
+                # Try Web Push (non-blocking)
+                try:
+                    from app.services.notifications.push_service import PushService
+
+                    push_service = PushService(session)
+                    await push_service.send_push_notification(
+                        user_id=reminder.user_id,
+                        title=reminder.title,
+                        body=reminder.message or f"Reminder: {reminder.title}",
+                        data={"reminder_id": str(reminder.id)},
+                    )
+                except Exception:
+                    logger.debug("Push notification skipped (no VAPID key or no subs)")
+
                 # Mark reminder as sent
                 reminder.is_sent = True
 
@@ -62,10 +78,12 @@ async def check_upcoming_reminders() -> None:
 
 async def check_missed_tasks() -> None:
     """Detect tasks past their deadline that are still pending."""
+    from sqlalchemy import and_, select
+
+    from app.models import Notification, NotificationType, Task, TaskStatus
+
     async with AsyncSessionLocal() as session:
         try:
-            from sqlalchemy import and_, select
-
             now = datetime.now(UTC)
             result = await session.execute(
                 select(Task).where(
@@ -87,6 +105,21 @@ async def check_missed_tasks() -> None:
                     data={"task_id": str(task.id)},
                 )
                 session.add(notification)
+
+                # Try Web Push (non-blocking)
+                try:
+                    from app.services.notifications.push_service import PushService
+
+                    push_service = PushService(session)
+                    await push_service.send_push_notification(
+                        user_id=task.user_id,
+                        title=f"Missed: {task.title}",
+                        body=f"Your task '{task.title}' has passed its deadline.",
+                        data={"task_id": str(task.id)},
+                    )
+                except Exception:
+                    logger.debug("Push notification skipped")
+
                 task.status = TaskStatus.SKIPPED
 
             if missed_tasks:
