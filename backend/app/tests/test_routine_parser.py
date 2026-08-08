@@ -8,7 +8,9 @@ from app.services.ai.routine_parser import AIRoutineParserService
 
 @pytest.fixture
 def parser():
-    return AIRoutineParserService()
+    p = AIRoutineParserService()
+    p.client = None
+    return p
 
 
 @pytest.mark.asyncio
