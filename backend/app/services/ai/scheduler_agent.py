@@ -8,12 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.exceptions import ExternalServiceError
 from app.core.logger import get_logger
+from app.models import Task
 from app.repositories.task_repository import TaskRepository
-from app.schemas.schedule import ChatRequest, ChatResponse, ParseRoutineRequest, ScheduleGenerateRequest
-from app.schemas.task import TaskCreate
+from app.repositories.user_repository import UserRepository
+from app.schemas.schedule import (
+    ChatRequest,
+    ChatResponse,
+    ParseRoutineRequest,
+    ScheduleGenerateRequest,
+)
 from app.services.ai.routine_parser import AIRoutineParserService
 from app.services.scheduling.engine import SchedulingEngine
-from app.api.deps import CurrentUser
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -88,6 +93,23 @@ class AIChatService:
             {
                 "type": "function",
                 "function": {
+                    "name": "delete_task",
+                    "description": "Delete an existing task",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "The ID of the task to delete (from context)",
+                            },
+                        },
+                        "required": ["task_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "generate_daily_schedule",
                     "description": "Generate a full daily schedule from a single prompt or routine description. Ask for clarification if needed.",
                     "parameters": {
@@ -99,8 +121,8 @@ class AIChatService:
                             }
                         },
                         "required": ["routine_description"],
-                    }
-                }
+                    },
+                },
             },
         ]
 
@@ -108,7 +130,7 @@ class AIChatService:
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a helpful schedule and productivity assistant. Use the provided tools to create or reschedule tasks if the user asks. If you modify a task, tell the user.",
+                    "content": "You are a helpful schedule and productivity assistant. Use the provided tools to create, reschedule, or delete tasks if the user asks. If you modify a task, tell the user.",
                 },
                 {"role": "user", "content": data.message},
             ]
@@ -141,45 +163,56 @@ class AIChatService:
                         new_time = args.get("new_time")
                         if t_id and new_time:
                             hour, minute = map(int, new_time.split(":"))
-                            await task_repo.update(
-                                self.db,
-                                db_obj=await task_repo.get_by_id_and_user(
-                                    UUID(t_id), self.user_id
-                                ),
-                                obj_in={
-                                    "is_fixed": True,
-                                    "fixed_start": time(hour, minute),
-                                },
+                            task = await task_repo.get_by_id_and_user(
+                                UUID(t_id), self.user_id
                             )
+                            if task:
+                                await task_repo.update(
+                                    task,
+                                    obj_in={
+                                        "is_fixed": True,
+                                        "fixed_start": time(hour, minute),
+                                    },
+                                )
                     elif tool_call.function.name == "create_task":
                         args = json.loads(tool_call.function.arguments)
-                        t_data = {
-                            "title": args.get("title"),
-                            "duration": args.get("duration"),
-                        }
+                        
+                        task_obj = Task(
+                            user_id=self.user_id,
+                            title=args.get("title"),
+                            duration=args.get("duration"),
+                        )
                         if args.get("fixed_start"):
                             hour, minute = map(int, args.get("fixed_start").split(":"))
-                            t_data["is_fixed"] = True
-                            t_data["fixed_start"] = time(hour, minute)
+                            task_obj.is_fixed = True
+                            task_obj.fixed_start = time(hour, minute)
 
-                        await task_repo.create(
-                            self.db, obj_in=TaskCreate(**t_data), user_id=self.user_id
-                        )
+                        await task_repo.create(task_obj)
+                    elif tool_call.function.name == "delete_task":
+                        args = json.loads(tool_call.function.arguments)
+                        t_id = args.get("task_id")
+                        if t_id:
+                            task = await task_repo.get_by_id_and_user(
+                                UUID(t_id), self.user_id
+                            )
+                            if task:
+                                await task_repo.delete(task)
                     elif tool_call.function.name == "generate_daily_schedule":
                         args = json.loads(tool_call.function.arguments)
                         routine_desc = args.get("routine_description")
                         if routine_desc:
-                            # Mock CurrentUser since SchedulingEngine expects it
-                            # Or we can modify SchedulingEngine to accept user_id, but CurrentUser has id.
-                            class MockUser:
-                                pass
-                            current_user = MockUser()
-                            current_user.id = self.user_id
-
-                            parser_service = AIRoutineParserService()
-                            parsed = await parser_service.parse_routine(ParseRoutineRequest(routine_text=routine_desc))
-                            engine = SchedulingEngine(self.db)
-                            await engine.generate(current_user, ScheduleGenerateRequest(include_parsed_routine=parsed))
+                            user_repo = UserRepository(self.db)
+                            user = await user_repo.get_by_id(self.user_id)
+                            if user:
+                                parser_service = AIRoutineParserService()
+                                parsed = await parser_service.parse_routine(
+                                    ParseRoutineRequest(routine_text=routine_desc)
+                                )
+                                engine = SchedulingEngine(self.db)
+                                await engine.generate(
+                                    user,
+                                    ScheduleGenerateRequest(include_parsed_routine=parsed),
+                                )
 
                 return ChatResponse(reply="I've updated your schedule as requested!")
 
