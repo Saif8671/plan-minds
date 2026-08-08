@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
-import { fetchProfile, getAnalytics, getTodaySchedule, chatAI } from '../api';
-import type { AnalyticsDashboard, ScheduleResponse, User } from '../types';
+import { fetchProfile, getAnalytics, getTodaySchedule, chatAI, getReminders, logTaskActivity } from '../api';
+import type { AnalyticsDashboard, ScheduleResponse, User, Reminder } from '../types';
 
 const DEFAULT_FOCUS_MINUTES = 25;
 
@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<User | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsDashboard | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   
   // Timer State
   const [focusMinutes, setFocusMinutes] = useState(DEFAULT_FOCUS_MINUTES);
@@ -31,17 +32,27 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [profileData, analyticsData, scheduleData] =
+        const [profileData, analyticsData, scheduleData, remindersData] =
           await Promise.allSettled([
             fetchProfile(),
             getAnalytics(),
             getTodaySchedule(),
+            getReminders(0, 10, false),
           ]);
-        if (profileData.status === 'fulfilled') setProfile(profileData.value);
+        if (profileData.status === 'fulfilled') {
+          setProfile(profileData.value);
+          const prefFocus = (profileData.value.preferred_study_hours as any)?.focus_minutes;
+          if (prefFocus) {
+            setFocusMinutes(prefFocus);
+            setFocusRemaining(prefFocus * 60);
+          }
+        }
         if (analyticsData.status === 'fulfilled')
           setAnalytics(analyticsData.value);
         if (scheduleData.status === 'fulfilled')
           setSchedule(scheduleData.value);
+        if (remindersData.status === 'fulfilled')
+          setReminders(remindersData.value);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -75,17 +86,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!focusActive) return;
     const timer = window.setInterval(() => {
-      setFocusRemaining((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(timer);
-          setFocusActive(false);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setFocusRemaining((prev) => prev - 1);
     }, 1000);
     return () => window.clearInterval(timer);
   }, [focusActive]);
+
+  useEffect(() => {
+    if (focusActive && focusRemaining <= 0) {
+      setFocusActive(false);
+      setFocusRemaining(0);
+      
+      const taskId = schedule?.generated_schedule?.blocks?.[0]?.task_id;
+      if (taskId) {
+        void logTaskActivity(taskId, focusMinutes);
+      }
+    }
+  }, [focusRemaining, focusActive, focusMinutes, schedule]);
 
   const startFocusTimer = () => setFocusActive(true);
   const pauseFocusTimer = () => setFocusActive(false);
@@ -126,8 +142,11 @@ export default function DashboardPage() {
       } catch (err) {
         console.error('Failed to reload schedule after chat', err);
       }
-    } catch (err) {
-      setChatMessages((prev) => [...prev, { role: 'ai', text: 'Sorry, I encountered an error.' }]);
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'ai', text: 'Sorry, I encountered an error.' },
+      ]);
     } finally {
       setIsChatLoading(false);
     }
@@ -346,6 +365,33 @@ export default function DashboardPage() {
                   )}
                 </article>
               </div>
+
+              {/* Reminders Block */}
+              <article className="card" style={{ flex: 1, minWidth: '300px' }}>
+                <div className="card-header">
+                  <div>
+                    <p className="card-eyebrow">Stay on track</p>
+                    <h2>Upcoming Reminders</h2>
+                  </div>
+                </div>
+                {reminders.length > 0 ? (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {reminders.map(r => (
+                      <li key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--surface-muted)', borderRadius: 'var(--radius-sm)' }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600 }}>{r.title}</p>
+                          {r.message && <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--muted)' }}>{r.message}</p>}
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+                          {new Date(r.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="empty-copy">No pending reminders</p>
+                )}
+              </article>
             </div>
           </div>
         )}
