@@ -7,7 +7,7 @@ Production-ready FastAPI backend that accepts natural-language routines, parses 
 - **Authentication** — JWT register, login, refresh tokens
 - **User Profiles** — Timezone, wake/sleep times, study preferences
 - **Task Management** — Fixed, flexible, and recurring tasks with priorities
-- **AI Routine Parser** — OpenAI GPT with rule-based fallback
+- **AI Routine Parser** — Groq-backed AI with rule-based fallback
 - **Scheduling Engine** — Conflict-aware daily/weekly schedule generation
 - **Reminders** — Task, meal, water, sleep, and custom reminders
 - **Analytics** — Dashboard, weekly, and monthly productivity reports
@@ -20,7 +20,7 @@ Production-ready FastAPI backend that accepts natural-language routines, parses 
 | Database | PostgreSQL + SQLAlchemy 2.0 (async) |
 | Migrations | Alembic |
 | Auth | JWT (python-jose + passlib) |
-| AI | OpenAI GPT (with rule-based fallback) |
+| AI | Groq API (with rule-based fallback) |
 | Validation | Pydantic v2 |
 
 ## Quick Start
@@ -140,7 +140,10 @@ pytest --cov=app
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
 | `SECRET_KEY` | JWT signing key | (required in production) |
-| `OPENAI_API_KEY` | OpenAI API key | (optional, uses rule-based fallback) |
+| `GROQ_API_KEY` | Groq API key | (optional, uses rule-based fallback) |
+| `GROQ_MODEL` | Groq model name | `llama-3.1-8b-instant` |
+| `OPENAI_API_KEY` | Backwards-compatible alias for `GROQ_API_KEY` | optional |
+| `OPENAI_MODEL` | Backwards-compatible alias for `GROQ_MODEL` | optional |
 | `CORS_ORIGINS` | Allowed CORS origins | `["http://localhost:3000"]` |
 
 ## Future Enhancements
