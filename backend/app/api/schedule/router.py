@@ -9,9 +9,11 @@ from app.schemas.auth import PaginatedResponse
 from app.schemas.schedule import (
     ScheduleCreate,
     ScheduleGenerateRequest,
+    ScheduleGenerateMultiRequest,
     ScheduleRegenerateRequest,
     ScheduleResponse,
     ScheduleUpdate,
+    ScheduleBlockUpdate,
 )
 from app.services.scheduling.engine import SchedulingEngine
 from app.services.scheduling.schedule_service import ScheduleService
@@ -81,6 +83,29 @@ async def delete_schedule(
     await service.delete_schedule(current_user.id, schedule_id)
 
 
+@router.patch("/{schedule_id}/blocks/{block_id}", response_model=ScheduleResponse)
+async def update_schedule_block(
+    schedule_id: UUID,
+    block_id: str,
+    data: ScheduleBlockUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = ScheduleService(db)
+    return await service.update_block(current_user.id, schedule_id, block_id, data)
+
+
+@router.delete("/{schedule_id}/blocks/{block_id}", response_model=ScheduleResponse)
+async def delete_schedule_block(
+    schedule_id: UUID,
+    block_id: str,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = ScheduleService(db)
+    return await service.delete_block(current_user.id, schedule_id, block_id)
+
+
 # ─── AI-powered schedule generation ────────────────────────────────────
 
 
@@ -92,6 +117,16 @@ async def generate_schedule(
 ):
     engine = SchedulingEngine(db)
     return await engine.generate(current_user, data)
+
+
+@router.post("/generate/multi-day", response_model=list[ScheduleResponse])
+async def generate_multi_day_schedule(
+    data: ScheduleGenerateMultiRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    engine = SchedulingEngine(db)
+    return await engine.generate_multi_day(current_user, data)
 
 
 @router.post("/regenerate", response_model=ScheduleResponse)
