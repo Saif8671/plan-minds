@@ -21,6 +21,7 @@ def test_recurring_daily_task_is_included_for_target_date():
         status=TaskStatus.PENDING,
         is_recurring=True,
         recurrence=RecurrenceType.DAILY,
+        recurrence_rule={"rrule": "FREQ=DAILY;INTERVAL=1"},
         created_at=datetime.now() - timedelta(days=1),
     )
 
