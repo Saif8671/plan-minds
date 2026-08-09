@@ -17,8 +17,8 @@ def test_build_schedule_fixed_and_flexible():
             title="College",
             is_fixed=True,
             fixed_start=time(9, 0),
-            fixed_end=time(16, 0),
-            duration=420,
+            fixed_end=time(12, 0),
+            duration=180,
             category=TaskCategory.WORK,
             status=TaskStatus.PENDING,
         ),
@@ -48,9 +48,12 @@ def test_build_schedule_fixed_and_flexible():
 
 
 def test_has_conflict():
-    engine = SchedulingEngine(db=None)  # type: ignore
-    blocks = [
+    from app.services.scheduling.pipeline import ScheduleContext
+    from datetime import date
+    
+    context = ScheduleContext(date.today(), time(6, 0), time(23, 0), None)
+    context.blocks = [
         ScheduleBlock(title="A", start=time(9, 0), end=time(10, 0), is_fixed=True),
     ]
-    assert engine._has_conflict(time(9, 30), time(10, 30), blocks) is True
-    assert engine._has_conflict(time(10, 0), time(11, 0), blocks) is False
+    assert context.has_conflict(time(9, 30), time(10, 30)) is True
+    assert context.has_conflict(time(10, 0), time(11, 0)) is False
