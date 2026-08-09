@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
@@ -21,23 +22,19 @@ from app.schemas.schedule import (
     GeneratedSchedule,
     ScheduleBlock,
     ScheduleGenerateRequest,
+    ScheduleGenerateMultiRequest,
     ScheduleRegenerateRequest,
     ScheduleResponse,
 )
+from app.services.scheduling.conflict_resolution import ConflictResolutionService
 
-PRIORITY_ORDER = {
-    TaskPriority.URGENT: 0,
-    TaskPriority.HIGH: 1,
-    TaskPriority.MEDIUM: 2,
-    TaskPriority.LOW: 3,
-}
-
-# Default meal blocks
-DEFAULT_MEALS = [
-    {"title": "Breakfast", "start": time(7, 0), "end": time(7, 30), "category": "meal"},
-    {"title": "Lunch", "start": time(12, 30), "end": time(13, 0), "category": "meal"},
-    {"title": "Dinner", "start": time(19, 30), "end": time(20, 0), "category": "meal"},
-]
+from app.services.scheduling.pipeline import (
+    ScheduleContext,
+    MealScheduler,
+    WorkCollegeScheduler,
+    FixedTaskScheduler,
+    FlexibleTaskScheduler,
+)
 
 
 class SchedulingEngine:
@@ -51,15 +48,17 @@ class SchedulingEngine:
         self, user: User, data: ScheduleGenerateRequest
     ) -> ScheduleResponse:
         target_date = data.target_date or date.today()
-        tasks = await self.task_repo.get_pending_for_user(user.id)
+        
+        # Load tasks and preferences concurrently
+        tasks, prefs = await asyncio.gather(
+            self.task_repo.get_pending_for_user(user.id),
+            self.prefs_repo.get_by_user(user.id)
+        )
 
         if data.include_parsed_routine:
             tasks = self._merge_parsed_routine(
                 tasks, data.include_parsed_routine, user.id
             )
-
-        # Load preferences
-        prefs = await self.prefs_repo.get_by_user(user.id)
 
         wake = user.wake_time or time(6, 0)
         sleep = user.sleep_time or time(23, 0)
@@ -80,6 +79,46 @@ class SchedulingEngine:
             tasks, target_date, wake, sleep, break_duration, prefs
         )
         return await self._persist_schedule(user.id, target_date, generated)
+
+    async def generate_multi_day(
+        self, user: User, data: ScheduleGenerateMultiRequest
+    ) -> list[ScheduleResponse]:
+        start_date = data.start_date or date.today()
+        
+        # Load tasks and preferences concurrently
+        tasks, prefs = await asyncio.gather(
+            self.task_repo.get_pending_for_user(user.id),
+            self.prefs_repo.get_by_user(user.id)
+        )
+        wake = user.wake_time or time(6, 0)
+        sleep = user.sleep_time or time(23, 0)
+        break_duration = 15
+        
+        if prefs:
+            wake = prefs.wake_time or wake
+            sleep = prefs.sleep_time or sleep
+            break_duration = prefs.break_duration_minutes or break_duration
+            
+        responses = []
+        
+        for i in range(data.days):
+            current_date = start_date + timedelta(days=i)
+            
+            generated = self._build_schedule(
+                tasks, current_date, wake, sleep, break_duration, prefs
+            )
+            resp = await self._persist_schedule(user.id, current_date, generated)
+            responses.append(resp)
+            
+            # Remove successfully placed non-recurring flexible tasks so they aren't scheduled again tomorrow
+            placed_task_ids = {
+                b.task_id for b in generated.blocks 
+                if b.task_id and not getattr(next((t for t in tasks if t.id == b.task_id), None), 'is_recurring', False)
+            }
+            
+            tasks = [t for t in tasks if getattr(t, 'is_recurring', False) or t.id not in placed_task_ids]
+
+        return responses
 
     async def regenerate(
         self, user: User, data: ScheduleRegenerateRequest
@@ -121,176 +160,34 @@ class SchedulingEngine:
         break_duration: int = 15,
         prefs: UserPreferences | None = None,
     ) -> GeneratedSchedule:
-        blocks: list[ScheduleBlock] = []
-        unscheduled: list[str] = []
-
-        # ── 1. Place meal blocks ────────────────────────────────────────
-        for meal in DEFAULT_MEALS:
-            meal_start = meal["start"]
-            meal_end = meal["end"]
-            # Only add meals within wake-sleep window
-            if self._time_in_range(meal_start, wake, sleep):
-                blocks.append(
-                    ScheduleBlock(
-                        title=meal["title"],
-                        start=meal_start,
-                        end=meal_end,
-                        category=meal["category"],
-                        is_fixed=True,
-                    )
-                )
-
-        # ── 2. Place work/college blocks from preferences ──────────────
-        if prefs:
-            if prefs.work_start and prefs.work_end:
-                blocks.append(
-                    ScheduleBlock(
-                        title="Work",
-                        start=prefs.work_start,
-                        end=prefs.work_end,
-                        category="work",
-                        is_fixed=True,
-                    )
-                )
-            if prefs.college_start and prefs.college_end:
-                blocks.append(
-                    ScheduleBlock(
-                        title="College",
-                        start=prefs.college_start,
-                        end=prefs.college_end,
-                        category="work",
-                        is_fixed=True,
-                    )
-                )
-
-        # ── 3. Classify tasks ──────────────────────────────────────────
-        recurring_tasks = [
-            t
-            for t in tasks
-            if t.is_recurring
-            and t.recurrence
-            in {RecurrenceType.DAILY, RecurrenceType.WEEKLY, RecurrenceType.MONTHLY}
+        context = ScheduleContext(target_date, wake, sleep, prefs)
+        
+        pipeline = [
+            MealScheduler(),
+            WorkCollegeScheduler(),
+            FixedTaskScheduler(),
+            FlexibleTaskScheduler(),
         ]
-        fixed_tasks = [t for t in tasks if t.is_fixed and t.fixed_start and t.fixed_end]
-        flexible_tasks = [t for t in tasks if not t.is_fixed and not t.is_recurring]
+        
+        for component in pipeline:
+            component.process(context, tasks)
 
-        # ── 4. Place fixed tasks ───────────────────────────────────────
-        for task in sorted(fixed_tasks, key=lambda t: t.fixed_start):
-            if not self._has_conflict(task.fixed_start, task.fixed_end, blocks):
-                blocks.append(
-                    ScheduleBlock(
-                        title=task.title,
-                        start=task.fixed_start,
-                        end=task.fixed_end,
-                        task_id=task.id,
-                        category=task.category.value,
-                        is_fixed=True,
-                    )
-                )
-            else:
-                unscheduled.append(f"{task.title} (conflict)")
-
-        # ── 5. Place flexible tasks with buffer + breaks ───────────────
-        cursor = datetime.combine(target_date, wake)
-        day_end = datetime.combine(target_date, sleep)
-        if day_end <= cursor:
-            day_end += timedelta(days=1)
-
-        # Sort by priority then deadline
-        flexible_sorted = sorted(
-            [*flexible_tasks, *recurring_tasks],
-            key=lambda t: (
-                PRIORITY_ORDER.get(t.priority, 99),
-                t.deadline or datetime.max,
-            ),
-        )
-
-        # Track cumulative work time for break insertion
-        work_minutes_since_break = 0
-        buffer_minutes = 10  # Buffer between tasks
-
-        for task in flexible_sorted:
-            duration = timedelta(minutes=task.duration or 0)
-            travel = timedelta(minutes=task.travel_time_minutes or 0)
-            placed = False
-
-            search_cursor = cursor
-
-            while search_cursor + duration + travel <= day_end:
-                proposed_start = (search_cursor + travel).time()
-                proposed_end = (search_cursor + travel + duration).time()
-
-                # Sleep protection: don't schedule before wake or after sleep
-                if not self._time_in_range(proposed_start, wake, sleep):
-                    search_cursor += timedelta(minutes=15)
-                    continue
-
-                if not self._has_conflict(proposed_start, proposed_end, blocks):
-                    blocks.append(
-                        ScheduleBlock(
-                            title=task.title,
-                            start=proposed_start,
-                            end=proposed_end,
-                            task_id=task.id,
-                            category=task.category.value,
-                            is_fixed=False,
-                        )
-                    )
-
-                    work_minutes_since_break += task.duration
-                    cursor = search_cursor + travel + duration + timedelta(
-                        minutes=buffer_minutes
-                    )
-
-                    # Insert break if worked 90+ minutes continuously
-                    if work_minutes_since_break >= 90 and break_duration > 0:
-                        break_start = cursor.time()
-                        break_end = (
-                            cursor + timedelta(minutes=break_duration)
-                        ).time()
-                        if self._time_in_range(break_start, wake, sleep):
-                            blocks.append(
-                                ScheduleBlock(
-                                    title="Break",
-                                    start=break_start,
-                                    end=break_end,
-                                    category="personal",
-                                    is_fixed=False,
-                                )
-                            )
-                            cursor += timedelta(minutes=break_duration)
-                        work_minutes_since_break = 0
-
-                    placed = True
-                    break
-
-                search_cursor += timedelta(minutes=15)
-
-            if not placed:
-                unscheduled.append(task.title)
-
-        blocks.sort(key=lambda b: b.start)
-
-        return GeneratedSchedule(
+        generated = GeneratedSchedule(
             date=target_date,
             wake_time=wake,
             sleep_time=sleep,
-            blocks=blocks,
-            unscheduled_tasks=unscheduled,
+            blocks=context.blocks,
+            unscheduled_tasks=context.unscheduled,
             metadata={
-                "total_blocks": len(blocks),
-                "unscheduled_count": len(unscheduled),
+                "total_blocks": len(context.blocks),
+                "unscheduled_count": len(context.unscheduled),
                 "break_duration": break_duration,
             },
         )
-
-    def _has_conflict(
-        self, start: time, end: time, blocks: list[ScheduleBlock]
-    ) -> bool:
-        for block in blocks:
-            if start < block.end and end > block.start:
-                return True
-        return False
+        
+        generated.suggestions = ConflictResolutionService.analyze_schedule(generated)
+        
+        return generated
 
     def _time_in_range(self, t: time, start: time, end: time) -> bool:
         """Check if time t falls within [start, end] range."""
