@@ -48,6 +48,16 @@ async def update_task(
     return await service.update_task(current_user.id, task_id, data)
 
 
+@router.patch("/{task_id}/complete", response_model=TaskResponse)
+async def complete_task(
+    task_id: UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    service = TaskService(db)
+    return await service.complete_task(current_user.id, task_id)
+
+
 @router.delete("/{task_id}", status_code=204)
 async def delete_task(task_id: UUID, current_user: CurrentUser, db: DbSession):
     service = TaskService(db)
