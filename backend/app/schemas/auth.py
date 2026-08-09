@@ -7,15 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 T = TypeVar("T")
 
 
-class MessageResponse(BaseModel):
-    message: str
 
-
-class PaginatedResponse(BaseModel, Generic[T]):
-    items: list[T]
-    total: int
-    page: int
-    page_size: int
 
 
 class TokenResponse(BaseModel):

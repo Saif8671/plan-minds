@@ -1,157 +1,215 @@
-"""Background scheduler for reminders and missed task detection.
+"""APScheduler background jobs for PlanMinds.
 
-Uses APScheduler to run periodic jobs:
-- check_upcoming_reminders: fires every 60s, finds unsent reminders due now
-- check_missed_tasks: fires every 5 min, detects tasks past their deadline
+Jobs:
+- check_upcoming_reminders   — every 60s  — fires due reminders
+- check_snoozed_reminders    — every 60s  — re-fires snoozed reminders past snooze_until
+- check_missed_reminders     — every 10m  — detects unfired reminders that slipped through
+- check_missed_tasks         — every 5m   — marks overdue tasks as SKIPPED
+- cleanup_old_history        — daily      — prunes ReminderHistory older than 90 days
 """
 
-from datetime import UTC, datetime
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.database import AsyncSessionLocal
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
-
 scheduler = AsyncIOScheduler()
 
 
-async def check_upcoming_reminders() -> None:
-    """Find unsent reminders whose time has arrived and create notifications."""
-    # Lazy imports to avoid circular dependencies at module level
-    from sqlalchemy import and_, select
-
-    from app.models import Notification, NotificationType, Reminder
-
-    async with AsyncSessionLocal() as session:
-        try:
-            now = datetime.now(UTC)
-            result = await session.execute(
-                select(Reminder).where(
-                    and_(
-                        Reminder.is_sent.is_(False),
-                        Reminder.reminder_time <= now,
-                    )
-                )
-            )
-            reminders = list(result.scalars().all())
-
-            for reminder in reminders:
-                # Create in-app notification
-                notification = Notification(
-                    user_id=reminder.user_id,
-                    title=reminder.title,
-                    message=reminder.message or f"Reminder: {reminder.title}",
-                    notification_type=NotificationType.TASK_REMINDER,
-                    data={
-                        "reminder_id": str(reminder.id),
-                        "task_id": str(reminder.task_id) if reminder.task_id else None,
-                    },
-                )
-                session.add(notification)
-
-                # Try Web Push (non-blocking)
-                try:
-                    from app.services.notifications.push_service import PushService
-
-                    push_service = PushService(session)
-                    await push_service.send_push_notification(
-                        user_id=reminder.user_id,
-                        title=reminder.title,
-                        body=reminder.message or f"Reminder: {reminder.title}",
-                        data={"reminder_id": str(reminder.id)},
-                    )
-                except Exception:
-                    logger.debug("Push notification skipped (no VAPID key or no subs)")
-
-                # Mark reminder as sent
-                reminder.is_sent = True
-
-            if reminders:
-                await session.commit()
-                logger.info("Processed %d reminders", len(reminders))
-        except Exception:
-            await session.rollback()
-            logger.exception("Error checking reminders")
-
-
-async def check_missed_tasks() -> None:
-    """Detect tasks past their deadline that are still pending."""
-    from sqlalchemy import and_, select
-
-    from app.models import Notification, NotificationType, Task, TaskStatus
-
-    async with AsyncSessionLocal() as session:
-        try:
-            now = datetime.now(UTC)
-            result = await session.execute(
-                select(Task).where(
-                    and_(
-                        Task.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]),
-                        Task.deadline.isnot(None),
-                        Task.deadline < now,
-                    )
-                )
-            )
-            missed_tasks = list(result.scalars().all())
-
-            for task in missed_tasks:
-                notification = Notification(
-                    user_id=task.user_id,
-                    title=f"Missed: {task.title}",
-                    message=f"Your task '{task.title}' has passed its deadline.",
-                    notification_type=NotificationType.TASK_MISSED,
-                    data={"task_id": str(task.id)},
-                )
-                session.add(notification)
-
-                # Try Web Push (non-blocking)
-                try:
-                    from app.services.notifications.push_service import PushService
-
-                    push_service = PushService(session)
-                    await push_service.send_push_notification(
-                        user_id=task.user_id,
-                        title=f"Missed: {task.title}",
-                        body=f"Your task '{task.title}' has passed its deadline.",
-                        data={"task_id": str(task.id)},
-                    )
-                except Exception:
-                    logger.debug("Push notification skipped")
-
-                task.status = TaskStatus.SKIPPED
-
-            if missed_tasks:
-                await session.commit()
-                logger.info("Detected %d missed tasks", len(missed_tasks))
-        except Exception:
-            await session.rollback()
-            logger.exception("Error checking missed tasks")
-
-
 def start_scheduler() -> None:
-    """Start the background scheduler with reminder and missed-task jobs."""
     scheduler.add_job(
         check_upcoming_reminders,
-        "interval",
-        seconds=60,
-        id="check_reminders",
+        trigger=IntervalTrigger(seconds=60),
+        id="check_upcoming_reminders",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        check_snoozed_reminders,
+        trigger=IntervalTrigger(seconds=60),
+        id="check_snoozed_reminders",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        check_missed_reminders,
+        trigger=IntervalTrigger(minutes=10),
+        id="check_missed_reminders",
         replace_existing=True,
     )
     scheduler.add_job(
         check_missed_tasks,
-        "interval",
-        minutes=5,
+        trigger=IntervalTrigger(minutes=5),
         id="check_missed_tasks",
         replace_existing=True,
     )
+    scheduler.add_job(
+        cleanup_old_history,
+        trigger=CronTrigger(hour=3, minute=0),
+        id="cleanup_old_history",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("Background scheduler started")
+    logger.info(
+        "Scheduler started with jobs: %s",
+        [job.id for job in scheduler.get_jobs()],
+    )
 
 
 def stop_scheduler() -> None:
-    """Gracefully shut down the scheduler."""
     if scheduler.running:
         scheduler.shutdown(wait=False)
-        logger.info("Background scheduler stopped")
+        logger.info("Scheduler stopped")
+
+
+# ─── Job implementations ─────────────────────────────────────────────
+
+
+async def check_upcoming_reminders() -> None:
+    """Fire all due, unsent, un-snoozed reminders."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models import Reminder
+    from app.services.reminders.reminder_service import ReminderService
+
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(Reminder).where(
+                    Reminder.is_sent == False,  # noqa: E712
+                    Reminder.is_completed == False,  # noqa: E712
+                    Reminder.is_snoozed == False,  # noqa: E712
+                    Reminder.reminder_time <= now,
+                )
+            )
+            reminders = result.scalars().all()
+
+            if not reminders:
+                return
+
+            service = ReminderService(db)
+            for reminder in reminders:
+                try:
+                    await service.process_fired_reminder(reminder)
+                except Exception as exc:
+                    logger.error("Failed to process reminder %s: %s", reminder.id, exc)
+
+            await db.commit()
+            logger.info("Fired %d reminders", len(reminders))
+        except Exception as exc:
+            await db.rollback()
+            logger.error("check_upcoming_reminders job failed: %s", exc)
+
+
+async def check_snoozed_reminders() -> None:
+    """Re-fire reminders whose snooze period has expired."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models import Reminder
+    from app.services.reminders.reminder_service import ReminderService
+
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(Reminder).where(
+                    Reminder.is_snoozed == True,  # noqa: E712
+                    Reminder.is_completed == False,  # noqa: E712
+                    Reminder.snooze_until <= now,
+                )
+            )
+            reminders = result.scalars().all()
+
+            if not reminders:
+                return
+
+            service = ReminderService(db)
+            for reminder in reminders:
+                # Un-snooze and re-process
+                reminder.is_snoozed = False
+                try:
+                    await service.process_fired_reminder(reminder)
+                except Exception as exc:
+                    logger.error("Failed to re-fire snoozed reminder %s: %s", reminder.id, exc)
+
+            await db.commit()
+            logger.info("Re-fired %d snoozed reminders", len(reminders))
+        except Exception as exc:
+            await db.rollback()
+            logger.error("check_snoozed_reminders job failed: %s", exc)
+
+
+async def check_missed_reminders() -> None:
+    """Detect and record reminders that weren't fired within the 15-minute window."""
+    from app.services.reminders.reminder_service import ReminderService
+
+    async with AsyncSessionLocal() as db:
+        try:
+            service = ReminderService(db)
+            count = await service.detect_missed_reminders(window_minutes=15)
+            await db.commit()
+            if count:
+                logger.info("Detected and marked %d missed reminders", count)
+        except Exception as exc:
+            await db.rollback()
+            logger.error("check_missed_reminders job failed: %s", exc)
+
+
+async def check_missed_tasks() -> None:
+    """Auto-skip overdue tasks that are past their deadline without completion."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models import Task, TaskStatus
+
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(Task).where(
+                    Task.deadline <= now,
+                    Task.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]),
+                )
+            )
+            tasks = result.scalars().all()
+
+            if not tasks:
+                return
+
+            for task in tasks:
+                task.status = TaskStatus.SKIPPED
+
+            await db.commit()
+            logger.info("Auto-skipped %d overdue tasks", len(tasks))
+        except Exception as exc:
+            await db.rollback()
+            logger.error("check_missed_tasks job failed: %s", exc)
+
+
+async def cleanup_old_history() -> None:
+    """Prune ReminderHistory records older than 90 days."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import delete
+
+    from app.models import ReminderHistory
+
+    cutoff = datetime.now(UTC) - timedelta(days=90)
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                delete(ReminderHistory).where(ReminderHistory.fired_at < cutoff)
+            )
+            await db.commit()
+            if result.rowcount:
+                logger.info("Cleaned up %d old reminder history records", result.rowcount)
+        except Exception as exc:
+            await db.rollback()
+            logger.error("cleanup_old_history job failed: %s", exc)
