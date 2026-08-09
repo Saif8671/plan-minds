@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import PlainTextResponse
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.analytics import DashboardAnalytics, PeriodAnalytics
@@ -23,3 +24,9 @@ async def get_weekly_analytics(current_user: CurrentUser, db: DbSession):
 async def get_monthly_analytics(current_user: CurrentUser, db: DbSession):
     service = AnalyticsService(db)
     return await service.get_monthly(current_user.id)
+
+
+@router.get("/reports/weekly", response_class=PlainTextResponse)
+async def get_weekly_report(current_user: CurrentUser, db: DbSession):
+    service = AnalyticsService(db)
+    return await service.generate_weekly_report_markdown(current_user.id)
