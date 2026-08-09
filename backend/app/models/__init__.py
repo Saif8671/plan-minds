@@ -93,6 +93,16 @@ class RoutineCategory(str, enum.Enum):
     OTHER = "other"
 
 
+class SchedulingStyle(str, enum.Enum):
+    STRICT = "strict"
+    FLEXIBLE = "flexible"
+
+
+class ConversationStatus(str, enum.Enum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
 # ─── User ──────────────────────────────────────────────────────────────
 
 
@@ -151,6 +161,12 @@ class User(Base):
     preferences: Mapped[Optional["UserPreferences"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    stats: Mapped[Optional["UserStats"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
 
 
 # ─── UserPreferences ──────────────────────────────────────────────────
@@ -180,6 +196,12 @@ class UserPreferences(Base):
     notification_preferences: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     working_days: Mapped[list | None] = mapped_column(JSONB, default=list)
+    meals: Mapped[dict | None] = mapped_column(JSONB)
+    scheduling_style: Mapped[SchedulingStyle | None] = mapped_column(
+        Enum(SchedulingStyle, values_callable=lambda x: [e.value for e in x]),
+        default=SchedulingStyle.FLEXIBLE,
+    )
+    default_buffer_time_minutes: Mapped[int] = mapped_column(Integer, default=15)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -188,6 +210,35 @@ class UserPreferences(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="preferences")
+
+
+# ─── UserStats ─────────────────────────────────────────────────────────
+
+
+class UserStats(Base):
+    __tablename__ = "user_stats"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    xp: Mapped[int] = mapped_column(Integer, default=0)
+    level: Mapped[int] = mapped_column(Integer, default=1)
+    streak_days: Mapped[int] = mapped_column(Integer, default=0)
+    last_active_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="stats")
 
 
 # ─── Schedule ──────────────────────────────────────────────────────────
@@ -475,3 +526,85 @@ class ActivityLog(Base):
     )
 
     task: Mapped["Task"] = relationship(back_populates="activity_logs")
+
+
+# ─── Conversation ──────────────────────────────────────────────────────
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[ConversationStatus] = mapped_column(
+        Enum(ConversationStatus, values_callable=lambda x: [e.value for e in x]),
+        default=ConversationStatus.ACTIVE,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="conversations")
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan", order_by="ConversationMessage.created_at"
+    )
+    state: Mapped[Optional["ConversationState"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan", uselist=False
+    )
+
+
+# ─── ConversationMessage ───────────────────────────────────────────────
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+
+# ─── ConversationState ─────────────────────────────────────────────────
+
+
+class ConversationState(Base):
+    __tablename__ = "conversation_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    current_state: Mapped[str] = mapped_column(String(64), default="DEFAULT")
+    missing_fields: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="state")
+
