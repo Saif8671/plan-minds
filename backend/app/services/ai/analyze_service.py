@@ -1,12 +1,15 @@
 import json
+from datetime import datetime
 from uuid import UUID
 
 from groq import AsyncGroq
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import ValidationError
 from app.core.logger import get_logger
-from app.models import AIAnalysis
+from app.models import AIAnalysis, Task, TaskCategory, TaskPriority
+from app.repositories.task_repository import TaskRepository
 from app.schemas.schedule import AIAnalyzeRequest, AIAnalyzeResponse, AIAnalyzeTask
 from app.services.ai.routine_parser import AIRoutineParserService
 
@@ -24,7 +27,10 @@ Return ONLY valid JSON with this exact schema:
       "end": "HH:MM" or null,
       "duration": minutes_int or null,
       "category": "work|study|health|personal|meal|sleep|other" or null,
-      "priority": "low|medium|high|urgent" or null
+      "priority": "low|medium|high|urgent" or null,
+      "deadline": "YYYY-MM-DDTHH:MM:SS" or null,
+      "is_recurring": true or false,
+      "recurrence_rule": "RFC5545 RRULE string" or null
     }
   ],
   "wake_time": "HH:MM" or null,
@@ -38,6 +44,8 @@ Rules:
 - For events with time ranges (e.g., "Gym from 8 to 9"), set start and end
 - For flexible tasks (e.g., "Study 2 hours"), set duration only
 - Infer categories from context
+- If user mentions deadlines (e.g. "by friday"), convert to a reasonable ISO timestamp (assumed next occurrence)
+- If task repeats (e.g. "every day"), set is_recurring=true and provide an RFC5545 RRULE (e.g., FREQ=DAILY)
 """
 
 
@@ -66,9 +74,63 @@ class AIAnalyzeService:
             model_used=settings.groq_model if self.client else "rule-based",
         )
         self.db.add(analysis)
-        await self.db.flush()
+        
+        if data.auto_persist:
+            await self._persist_tasks(user_id, result.tasks)
+            
+        await self.db.commit()
 
         return result
+
+    def _validate_task(self, task: AIAnalyzeTask) -> None:
+        if not task.title:
+            raise ValidationError("Task title is required")
+        if task.duration is not None and task.duration <= 0:
+            raise ValidationError("Task duration must be strictly positive")
+
+    async def _persist_tasks(self, user_id: UUID, tasks: list[AIAnalyzeTask]) -> None:
+        task_repo = TaskRepository(self.db)
+        for t in tasks:
+            self._validate_task(t)
+            
+            # Convert string priority to enum
+            priority_val = TaskPriority.MEDIUM
+            if t.priority:
+                try:
+                    priority_val = TaskPriority(t.priority.lower())
+                except ValueError:
+                    pass
+            
+            # Convert string category to enum
+            category_val = TaskCategory.OTHER
+            if t.category:
+                try:
+                    category_val = TaskCategory(t.category.lower())
+                except ValueError:
+                    pass
+
+            db_task = Task(
+                user_id=user_id,
+                title=t.title,
+                duration=t.duration,
+                category=category_val,
+                priority=priority_val,
+                is_recurring=t.is_recurring,
+                recurrence_rule={"rrule": t.recurrence_rule} if t.recurrence_rule else None,
+                deadline=t.deadline,
+            )
+            
+            if t.start and t.end:
+                try:
+                    start_time = datetime.strptime(t.start, "%H:%M").time()
+                    end_time = datetime.strptime(t.end, "%H:%M").time()
+                    db_task.is_fixed = True
+                    db_task.fixed_start = start_time
+                    db_task.fixed_end = end_time
+                except ValueError:
+                    pass
+                    
+            self.db.add(db_task)
 
     async def _analyze_with_ai(self, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
         try:
