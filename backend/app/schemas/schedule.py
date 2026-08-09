@@ -1,7 +1,7 @@
 import datetime as dt
 from datetime import datetime, time
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,7 +91,9 @@ class ChatResponse(BaseModel):
 # ─── Schedule generation schemas ────────────────────────────────────────
 
 
+
 class ScheduleBlock(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex)
     title: str
     start: time
     end: time
@@ -100,18 +102,31 @@ class ScheduleBlock(BaseModel):
     is_fixed: bool = False
 
 
+class ScheduleBlockUpdate(BaseModel):
+    title: str | None = None
+    start: time | None = None
+    end: time | None = None
+    category: str | None = None
+
+
 class GeneratedSchedule(BaseModel):
     date: dt.date
     wake_time: time | None = None
     sleep_time: time | None = None
     blocks: list[ScheduleBlock] = Field(default_factory=list)
     unscheduled_tasks: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
 
 
 class ScheduleGenerateRequest(BaseModel):
     target_date: dt.date | None = None
     include_parsed_routine: ParsedRoutine | None = None
+
+
+class ScheduleGenerateMultiRequest(BaseModel):
+    start_date: dt.date | None = None
+    days: int = Field(default=3, ge=2, le=14)
 
 
 class ScheduleRegenerateRequest(BaseModel):
@@ -125,6 +140,7 @@ class ScheduleRegenerateRequest(BaseModel):
 class AIAnalyzeRequest(BaseModel):
     text: str = Field(min_length=3, max_length=5000)
     timezone: str | None = "UTC"
+    auto_persist: bool = Field(default=False, description="Whether to automatically save extracted tasks to the database")
 
 
 class AIAnalyzeTask(BaseModel):
@@ -134,6 +150,9 @@ class AIAnalyzeTask(BaseModel):
     duration: int | None = None
     category: str | None = None
     priority: str | None = None
+    deadline: datetime | None = None
+    is_recurring: bool = False
+    recurrence_rule: str | None = None
 
 
 class AIAnalyzeResponse(BaseModel):
