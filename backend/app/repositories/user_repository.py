@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User
 from app.repositories.base import BaseRepository
+from cachetools import TTLCache
+
+_user_cache = TTLCache(maxsize=100, ttl=300)
 
 
 class UserRepository(BaseRepository[User]):
@@ -28,7 +31,24 @@ class UserRepository(BaseRepository[User]):
         return result.scalar_one_or_none()
 
     async def get_active_by_id(self, user_id: UUID) -> User | None:
+        cache_key = f"active_{user_id}"
+        if cache_key in _user_cache:
+            return _user_cache[cache_key]
+            
         result = await self.db.execute(
             select(User).where(User.id == user_id, User.is_active.is_(True))
         )
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user:
+            _user_cache[cache_key] = user
+        return user
+
+    async def get_by_id(self, id: UUID) -> User | None:
+        cache_key = f"user_{id}"
+        if cache_key in _user_cache:
+            return _user_cache[cache_key]
+            
+        user = await super().get_by_id(id)
+        if user:
+            _user_cache[cache_key] = user
+        return user
