@@ -114,84 +114,163 @@ class FixedTaskScheduler(PipelineComponent):
                 context.unscheduled.append(f"{task.title} (conflict)")
 
 
-class FlexibleTaskScheduler(PipelineComponent):
+class ScoredTaskScheduler(PipelineComponent):
+    """Places flexible tasks by scoring every available 15-min slot.
+
+    Score components (all additive):
+    - Priority:          urgent=40, high=30, medium=20, low=10
+    - Deadline urgency:  up to 30 points (more urgent = closer deadline)
+    - Energy:            morning > afternoon slump > evening recovery
+    - Preferred time:    bonus if slot matches HabitProfile preferred hour
+    - Load penalty:      -10 if day already ≥70% full
+    """
+
+    ENERGY_MAP = {  # hour_of_day → energy score (0-20)
+        **{h: 18 for h in range(6, 10)},    # Early morning: high
+        **{h: 15 for h in range(10, 12)},   # Late morning: good
+        **{h: 8  for h in range(12, 14)},   # Post-lunch dip
+        **{h: 14 for h in range(14, 18)},   # Afternoon: decent
+        **{h: 12 for h in range(18, 21)},   # Evening: moderate
+        **{h: 5  for h in range(21, 24)},   # Night: low
+    }
+
     def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
         flexible_tasks = [t for t in tasks if not t.is_fixed and not t.is_recurring]
-        
-        # Also include recurring flexible tasks that occur today
         recurring_flex = [t for t in tasks if not t.is_fixed and t.is_recurring]
         for rt in recurring_flex:
             occurrences = RecurrenceExpander.expand_task_for_date(rt, context.target_date)
             if occurrences:
                 flexible_tasks.append(rt)
 
-        cursor = datetime.combine(context.target_date, context.wake)
+        day_start = datetime.combine(context.target_date, context.wake)
         day_end = datetime.combine(context.target_date, context.sleep)
-        if day_end <= cursor:
+        if day_end <= day_start:
             day_end += timedelta(days=1)
 
+        total_available = (day_end - day_start).total_seconds() / 60
+        scheduled_minutes = sum(
+            (datetime.combine(context.target_date, b.end) -
+             datetime.combine(context.target_date, b.start)).total_seconds() / 60
+            for b in context.blocks
+        )
+        load_ratio = scheduled_minutes / max(total_available, 1)
+
+        # Sort by priority then deadline for tiebreaking
         flexible_sorted = sorted(
             flexible_tasks,
             key=lambda t: (
-                PRIORITY_ORDER.get(t.priority.value if hasattr(t.priority, 'value') else str(t.priority).lower(), 99),
+                PRIORITY_ORDER.get(
+                    t.priority.value if hasattr(t.priority, "value")
+                    else str(t.priority).lower(), 99
+                ),
                 t.deadline or datetime.max,
             ),
         )
 
         work_minutes = 0
         break_duration = context.prefs.break_duration_minutes if context.prefs else 15
+        habit_profile = getattr(context, "habit_profile", None)
 
         for task in flexible_sorted:
             duration = timedelta(minutes=task.duration or 0)
             travel = timedelta(minutes=task.travel_time_minutes or 0)
-            placed = False
-            search_cursor = cursor
 
-            while search_cursor + duration + travel <= day_end:
-                proposed_start = (search_cursor + travel).time()
-                proposed_end = (search_cursor + travel + duration).time()
+            best_slot: datetime | None = None
+            best_score: float = -1.0
 
-                if not context.time_in_range(proposed_start):
-                    search_cursor += timedelta(minutes=15)
+            # Evaluate every 15-min candidate slot
+            candidate = day_start
+            while candidate + duration + travel <= day_end:
+                start_t = (candidate + travel).time()
+                end_t = (candidate + travel + duration).time()
+
+                if not context.time_in_range(start_t) or context.has_conflict(start_t, end_t):
+                    candidate += timedelta(minutes=15)
                     continue
 
-                if not context.has_conflict(proposed_start, proposed_end):
-                    context.blocks.append(
-                        ScheduleBlock(
-                            title=task.title,
-                            start=proposed_start,
-                            end=proposed_end,
-                            task_id=task.id,
-                            category=task.category.value,
-                            is_fixed=False,
-                        )
+                score = self._score_slot(task, candidate, load_ratio, habit_profile)
+                if score > best_score:
+                    best_score = score
+                    best_slot = candidate
+
+                candidate += timedelta(minutes=15)
+
+            if best_slot is not None:
+                placed_start = (best_slot + travel).time()
+                placed_end = (best_slot + travel + duration).time()
+                context.blocks.append(
+                    ScheduleBlock(
+                        title=task.title,
+                        start=placed_start,
+                        end=placed_end,
+                        task_id=task.id,
+                        category=task.category.value,
+                        is_fixed=False,
+                        score=round(best_score, 2),
                     )
+                )
+                work_minutes += task.duration or 0
 
-                    work_minutes += task.duration or 0
-                    cursor = search_cursor + travel + duration + timedelta(minutes=10)
-
-                    if work_minutes >= 90 and break_duration > 0:
-                        break_start = cursor.time()
-                        break_end = (cursor + timedelta(minutes=break_duration)).time()
-                        if context.time_in_range(break_start):
-                            context.blocks.append(
-                                ScheduleBlock(
-                                    title="Break",
-                                    start=break_start,
-                                    end=break_end,
-                                    category="personal",
-                                    is_fixed=False,
-                                )
+                if work_minutes >= 90 and break_duration > 0:
+                    break_cursor = datetime.combine(context.target_date, placed_end)
+                    break_start = break_cursor.time()
+                    break_end = (break_cursor + timedelta(minutes=break_duration)).time()
+                    if context.time_in_range(break_start) and not context.has_conflict(break_start, break_end):
+                        context.blocks.append(
+                            ScheduleBlock(
+                                title="Break",
+                                start=break_start,
+                                end=break_end,
+                                category="personal",
+                                is_fixed=False,
                             )
-                            cursor += timedelta(minutes=break_duration)
-                        work_minutes = 0
-
-                    placed = True
-                    break
-                
-                search_cursor += timedelta(minutes=15)
-
-            if not placed:
+                        )
+                    work_minutes = 0
+            else:
                 context.unscheduled.append(task.title)
 
         context.blocks.sort(key=lambda b: b.start)
+
+    def _score_slot(
+        self, task: Task, slot_start: datetime, load_ratio: float, habit_profile
+    ) -> float:
+        score = 0.0
+
+        # 1. Priority score
+        priority_scores = {"urgent": 40.0, "high": 30.0, "medium": 20.0, "low": 10.0}
+        pval = task.priority.value if hasattr(task.priority, "value") else str(task.priority).lower()
+        score += priority_scores.get(pval, 10.0)
+
+        # 2. Deadline urgency (0–30 points)
+        if task.deadline:
+            hours_until = max(0, (task.deadline - slot_start).total_seconds() / 3600)
+            if hours_until < 4:
+                score += 30
+            elif hours_until < 24:
+                score += 20
+            elif hours_until < 72:
+                score += 10
+
+        # 3. Energy score (0–20)
+        hour = slot_start.hour
+        score += self.ENERGY_MAP.get(hour, 10)
+
+        # 4. Preferred time bonus (0–15)
+        if habit_profile:
+            from app.models import TaskCategory
+            if task.category == TaskCategory.STUDY and habit_profile.preferred_study_hour is not None:
+                diff = abs(hour - habit_profile.preferred_study_hour)
+                score += max(0, 15 - diff * 3)
+            elif task.category == TaskCategory.HEALTH and habit_profile.preferred_workout_hour is not None:
+                diff = abs(hour - habit_profile.preferred_workout_hour)
+                score += max(0, 15 - diff * 3)
+
+        # 5. Load penalty
+        if load_ratio >= 0.7:
+            score -= 10
+
+        return score
+
+
+# Keep FlexibleTaskScheduler as an alias for backwards compatibility
+FlexibleTaskScheduler = ScoredTaskScheduler
