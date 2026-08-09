@@ -3,14 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.auth import MessageResponse
+from app.schemas.base import ApiResponse, MessageData
 from app.schemas.notification import NotificationResponse
 from app.services.notifications.notification_service import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
-@router.get("", response_model=list[NotificationResponse])
+@router.get("", response_model=ApiResponse[list[NotificationResponse]])
 async def list_notifications(
     current_user: CurrentUser,
     db: DbSession,
@@ -19,31 +19,33 @@ async def list_notifications(
     unread_only: bool = False,
 ):
     service = NotificationService(db)
-    return await service.get_notifications(current_user.id, skip, limit, unread_only)
+    result = await service.get_notifications(current_user.id, skip, limit, unread_only)
+    return ApiResponse(data=result)
 
 
 @router.get("/unread-count")
 async def get_unread_count(current_user: CurrentUser, db: DbSession):
     service = NotificationService(db)
     count = await service.get_unread_count(current_user.id)
-    return {"unread_count": count}
+    return ApiResponse(data={"unread_count": count})
 
 
-@router.patch("/{notification_id}/read", response_model=NotificationResponse)
+@router.patch("/{notification_id}/read", response_model=ApiResponse[NotificationResponse])
 async def mark_as_read(
     notification_id: UUID,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = NotificationService(db)
-    return await service.mark_as_read(current_user.id, notification_id)
+    result = await service.mark_as_read(current_user.id, notification_id)
+    return ApiResponse(data=result)
 
 
-@router.post("/read-all", response_model=MessageResponse)
+@router.post("/read-all", response_model=ApiResponse[MessageData])
 async def mark_all_as_read(current_user: CurrentUser, db: DbSession):
     service = NotificationService(db)
     await service.mark_all_as_read(current_user.id)
-    return MessageResponse(message="All notifications marked as read")
+    return ApiResponse(data=MessageData(message="All notifications marked as read"))
 
 
 @router.delete("/{notification_id}", status_code=204)

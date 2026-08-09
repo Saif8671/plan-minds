@@ -2,32 +2,36 @@ from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.preferences import UserPreferencesResponse, UserPreferencesUpdate
+from app.schemas.base import ApiResponse
 from app.services.preferences import PreferencesService
 
 router = APIRouter(prefix="/users/me/preferences", tags=["User Preferences"])
 
 
-@router.get("", response_model=UserPreferencesResponse)
+@router.get("", response_model=ApiResponse[UserPreferencesResponse])
 async def get_preferences(current_user: CurrentUser, db: DbSession):
     service = PreferencesService(db)
-    return await service.get_preferences(current_user.id)
+    result = await service.get_preferences(current_user.id)
+    return ApiResponse(data=result)
 
 
-@router.put("", response_model=UserPreferencesResponse)
+@router.put("", response_model=ApiResponse[UserPreferencesResponse])
 async def replace_preferences(
     data: UserPreferencesUpdate,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = PreferencesService(db)
-    return await service.replace_preferences(current_user.id, data)
+    result = await service.replace_preferences(current_user.id, data)
+    return ApiResponse(data=result)
 
 
-@router.patch("", response_model=UserPreferencesResponse)
+@router.patch("", response_model=ApiResponse[UserPreferencesResponse])
 async def update_preferences(
     data: UserPreferencesUpdate,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = PreferencesService(db)
-    return await service.update_preferences(current_user.id, data)
+    result = await service.update_preferences(current_user.id, data)
+    return ApiResponse(data=result)
