@@ -173,3 +173,34 @@ class AnalyticsService:
             )
 
         return insights
+
+    async def generate_weekly_report_markdown(self, user_id: UUID) -> str:
+        weekly = await self.get_weekly(user_id)
+        
+        lines = [
+            f"# Weekly Performance Report",
+            f"**Date Range:** {weekly.start_date} to {weekly.end_date}",
+            f"---",
+            f"## Summary",
+            f"- **Completion Rate:** {weekly.completion_rate}%",
+            f"- **Focus Hours:** {weekly.focus_hours}h",
+            f"- **Study Hours:** {weekly.study_hours}h",
+            f"- **Missed Tasks:** {weekly.missed_tasks}",
+            f"- **Consistency Score:** {weekly.consistency_score}/100",
+            f"",
+            f"## Daily Breakdown",
+        ]
+        
+        for day in weekly.daily_breakdown:
+            lines.append(f"- **{day['date']}:** {day['completed']}/{day['total']} tasks ({day['rate']}%)")
+            
+        lines.append("")
+        lines.append("## Insights & Recommendations")
+        
+        if weekly.insights:
+            for insight in weekly.insights:
+                lines.append(f"- {insight}")
+        else:
+            lines.append("- Keep up the good work!")
+            
+        return "\n".join(lines)
