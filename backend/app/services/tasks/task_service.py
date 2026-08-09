@@ -18,6 +18,7 @@ from app.repositories.activity_repository import ActivityLogRepository
 from app.repositories.reminder_repository import ReminderRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.services.gamification.xp_service import GamificationService
 
 
 class TaskService:
@@ -161,6 +162,30 @@ class TaskService:
         if not task:
             raise NotFoundError("Task")
         await self.task_repo.delete(task)
+
+    async def complete_task(self, user_id: UUID, task_id: UUID) -> TaskResponse:
+        # We reuse update_task to leverage the recurrence logic
+        update_data = TaskUpdate(completed=True, status=TaskStatus.COMPLETED)
+        task_response = await self.update_task(user_id, task_id, update_data)
+        
+        # Log activity
+        activity = ActivityLog(
+            task_id=task_id,
+            time_spent=task_response.duration,
+            status=ActivityStatus.COMPLETED,
+            completed_at=datetime.now(UTC),
+        )
+        await self.activity_repo.create(activity)
+        
+        # Award XP
+        task_model = await self.task_repo.get_by_id_and_user(task_id, user_id)
+        if task_model:
+            gamification = GamificationService(self.db)
+            xp_result = await gamification.award_task_completion_xp(user_id, task_model)
+            # We can attach the xp_result to the response if we extend the schema, 
+            # or just let it run silently. For now, it runs silently.
+        
+        return task_response
 
     async def log_activity(self, user_id: UUID, task_id: UUID, time_spent: int) -> dict:
         task = await self.task_repo.get_by_id_and_user(task_id, user_id)
