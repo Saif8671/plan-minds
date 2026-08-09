@@ -3,24 +3,25 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.auth import PaginatedResponse
+from app.schemas.base import ApiResponse, PaginatedData
 from app.schemas.routine import RoutineCreate, RoutineResponse, RoutineUpdate
 from app.services.routines import RoutineService
 
 router = APIRouter(prefix="/routines", tags=["Routines"])
 
 
-@router.post("", response_model=RoutineResponse, status_code=201)
+@router.post("", response_model=ApiResponse[RoutineResponse], status_code=201)
 async def create_routine(
     data: RoutineCreate,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = RoutineService(db)
-    return await service.create_routine(current_user.id, data)
+    result = await service.create_routine(current_user.id, data)
+    return ApiResponse(data=result)
 
 
-@router.get("", response_model=PaginatedResponse[RoutineResponse])
+@router.get("", response_model=ApiResponse[PaginatedData[RoutineResponse]])
 async def list_routines(
     current_user: CurrentUser,
     db: DbSession,
@@ -33,22 +34,23 @@ async def list_routines(
     routines, total = await service.get_routines(
         current_user.id, skip, page_size, active_only
     )
-    return PaginatedResponse(
+    return ApiResponse(data=PaginatedData(
         items=routines, total=total, page=page, page_size=page_size
-    )
+    ))
 
 
-@router.get("/{routine_id}", response_model=RoutineResponse)
+@router.get("/{routine_id}", response_model=ApiResponse[RoutineResponse])
 async def get_routine(
     routine_id: UUID,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = RoutineService(db)
-    return await service.get_routine(current_user.id, routine_id)
+    result = await service.get_routine(current_user.id, routine_id)
+    return ApiResponse(data=result)
 
 
-@router.patch("/{routine_id}", response_model=RoutineResponse)
+@router.patch("/{routine_id}", response_model=ApiResponse[RoutineResponse])
 async def update_routine(
     routine_id: UUID,
     data: RoutineUpdate,
@@ -56,7 +58,8 @@ async def update_routine(
     db: DbSession,
 ):
     service = RoutineService(db)
-    return await service.update_routine(current_user.id, routine_id, data)
+    result = await service.update_routine(current_user.id, routine_id, data)
+    return ApiResponse(data=result)
 
 
 @router.delete("/{routine_id}", status_code=204)
