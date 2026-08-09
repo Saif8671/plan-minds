@@ -1,18 +1,21 @@
+"""AI-powered routine parser with few-shot prompting, retry + exponential backoff,
+and a rule-based fallback for when the AI is unavailable or returns invalid JSON.
+"""
+
+import asyncio
 import json
-import re
-from datetime import time
 
 from groq import AsyncGroq
 
 from app.core.config import get_settings
 from app.core.logger import get_logger
-from app.schemas.schedule import (
-    ParsedRoutine,
-    ParseRoutineRequest,
-)
+from app.schemas.schedule import ParsedRoutine, ParseRoutineRequest
+from app.services.ai.rule_parser import parse_with_rules
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+# ─── Few-shot system prompt ─────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a routine parsing assistant. Extract structured schedule information from natural language.
 
@@ -33,36 +36,75 @@ Rules:
 - College/work with time range = fixed event
 - "need X hours Y" = flexible task with duration X*60, title Y
 - For "revision" or similar without duration, default to 60 minutes
+
+--- EXAMPLES ---
+
+Input: "I wake up at 7am, college from 9 to 1pm, need 2 hours study, gym every evening, sleep at 11pm"
+Output:
+{
+  "wake_time": "07:00",
+  "sleep_time": "23:00",
+  "fixed_events": [{"title": "College", "start": "09:00", "end": "13:00", "category": "work"}],
+  "flexible_tasks": [
+    {"title": "Study", "duration": 120, "priority": "high", "category": "study"},
+    {"title": "Gym", "duration": 60, "priority": "medium", "category": "health"}
+  ],
+  "notes": null
+}
+
+Input: "Work 9-5, morning run, lunch break, need 1 hour revision before bed at midnight"
+Output:
+{
+  "wake_time": null,
+  "sleep_time": "00:00",
+  "fixed_events": [{"title": "Work", "start": "09:00", "end": "17:00", "category": "work"}],
+  "flexible_tasks": [
+    {"title": "Morning Run", "duration": 30, "priority": "medium", "category": "health"},
+    {"title": "Revision", "duration": 60, "priority": "high", "category": "study"}
+  ],
+  "notes": "Lunch break is flexible"
+}
+
+Input: "Gym at 6pm, study 3 hours for exams, wake at 6am, sleep 10pm"
+Output:
+{
+  "wake_time": "06:00",
+  "sleep_time": "22:00",
+  "fixed_events": [{"title": "Gym", "start": "18:00", "end": "19:00", "category": "health"}],
+  "flexible_tasks": [
+    {"title": "Study", "duration": 180, "priority": "urgent", "category": "study"}
+  ],
+  "notes": null
+}
 """
+
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [0.5, 1.0, 2.0]  # seconds
 
 
 class AIRoutineParserService:
     def __init__(self):
         self.client = (
-            AsyncGroq(
-                api_key=settings.groq_api_key,
-            )
-            if settings.groq_api_key
-            else None
+            AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
         )
 
     async def parse_routine(self, data: ParseRoutineRequest) -> ParsedRoutine:
-        # Try AI first if available, fall back to rules
+        """Parse a routine description, using AI with rule-based fallback."""
         if self.client and settings.groq_api_key:
             try:
                 return await self._parse_with_ai(data)
             except Exception as exc:
                 logger.warning("AI parsing failed, falling back to rules: %s", exc)
+        return self._fallback(data.routine_text)
 
-        return self._parse_with_rules(data.routine_text)
+    # ─── AI path ───────────────────────────────────────────────────────
 
     async def _parse_with_ai(self, data: ParseRoutineRequest) -> ParsedRoutine:
-        max_retries = 2
-        last_error = None
+        last_error: Exception | None = None
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(_MAX_RETRIES):
             try:
-                response = await self.client.chat.completions.create(
+                response = await self.client.chat.completions.create(  # type: ignore[union-attr]
                     model=settings.groq_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
@@ -73,141 +115,69 @@ class AIRoutineParserService:
                     ],
                     temperature=0.1,
                     response_format={"type": "json_object"},
+                    max_tokens=800,
                 )
-                content = response.choices[0].message.content
-                parsed = json.loads(content)
-                result = ParsedRoutine.model_validate(parsed)
+                content = response.choices[0].message.content or ""
+                parsed_dict = json.loads(content)
+                result = ParsedRoutine.model_validate(parsed_dict)
 
-                # Validate output quality
+                # Quality gate: retry if AI returned nothing useful
                 if not result.fixed_events and not result.flexible_tasks:
-                    if attempt < max_retries:
-                        logger.info("AI returned empty result, retrying...")
+                    logger.info(
+                        "AI returned empty result (attempt %d/%d), retrying…",
+                        attempt + 1,
+                        _MAX_RETRIES,
+                    )
+                    if attempt < _MAX_RETRIES - 1:
+                        await asyncio.sleep(_RETRY_DELAYS[attempt])
                         continue
-                    # Fall back to rules if AI keeps returning empty
-                    return self._parse_with_rules(data.routine_text)
+                    return self._fallback(data.routine_text)
 
                 return result
+
             except json.JSONDecodeError as exc:
                 last_error = exc
                 logger.warning(
-                    "AI returned invalid JSON (attempt %d): %s", attempt + 1, exc
+                    "AI returned invalid JSON (attempt %d/%d): %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    exc,
                 )
+                # Attempt partial recovery from truncated/malformed JSON
+                recovered = self._try_partial_recovery(content if "content" in dir() else "")
+                if recovered:
+                    return recovered
+
             except Exception as exc:
                 last_error = exc
-                logger.warning("AI parsing error (attempt %d): %s", attempt + 1, exc)
-                if attempt == max_retries:
-                    break
-
-        logger.warning("All AI attempts failed, falling back to rules: %s", last_error)
-        return self._parse_with_rules(data.routine_text)
-
-    def _parse_with_rules(self, text: str) -> ParsedRoutine:
-        text_lower = text.lower()
-        wake_time = self._extract_time(text_lower, ["wake up", "wake at", "i wake"])
-        sleep_time = self._extract_time(
-            text_lower, ["sleep at", "sleep by", "bed at", "sleep before"]
-        )
-
-        fixed_events = []
-        flex_match = re.findall(
-            r"(college|work|school|office|class|gym).*?(\d{1,2})(?::(\d{2}))?\s*(?:am|pm)?\s*(?:to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(?:am|pm)?",
-            text_lower,
-        )
-        for match in flex_match:
-            title = match[0].title()
-            start = self._to_time(int(match[1]), int(match[2] or 0))
-            end = self._to_time(int(match[3]), int(match[4] or 0))
-            fixed_events.append(
-                {"title": title, "start": start, "end": end, "category": "work"}
-            )
-
-        flexible_tasks = []
-        duration_patterns = [
-            (
-                r"need\s+(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
-                lambda m: (m.group(2).strip(), int(m.group(1)) * 60),
-            ),
-            (
-                r"(\d+)\s*hours?\s*(?:of\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
-                lambda m: (m.group(2).strip(), int(m.group(1)) * 60),
-            ),
-            (
-                r"([a-zA-Z]+)\s+every\s+(morning|evening|day)",
-                lambda m: (m.group(1).strip(), 60),
-            ),
-            (r"study\s+(\d+)\s*hours?", lambda m: ("Study", int(m.group(1)) * 60)),
-            (
-                r"need\s+revision",
-                lambda m: ("Revision", 60),
-            ),
-        ]
-        seen_titles = set()
-        for pattern, extractor in duration_patterns:
-            for match in re.finditer(pattern, text_lower):
-                title, duration = extractor(match)
-                title = title.strip().title()
-                if not title:
-                    continue
-                if title.lower() not in seen_titles:
-                    seen_titles.add(title.lower())
-                    flexible_tasks.append(
-                        {
-                            "title": title,
-                            "duration": duration,
-                            "priority": "medium",
-                            "category": "study",
-                        }
-                    )
-
-        # Handle standalone "Gym 6PM" pattern
-        gym_match = re.search(
-            r"gym\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", text_lower
-        )
-        if gym_match and "gym" not in [e["title"].lower() for e in fixed_events]:
-            hour = int(gym_match.group(1))
-            minute = int(gym_match.group(2) or 0)
-            ampm = gym_match.group(3)
-            if ampm == "pm" and hour < 12:
-                hour += 12
-            elif not ampm and hour < 12:
-                hour += 12  # Assume PM for gym
-            end_hour = hour + 1  # Default 1 hour
-            if "gym" not in seen_titles:
-                fixed_events.append(
-                    {
-                        "title": "Gym",
-                        "start": time(hour, minute),
-                        "end": time(min(end_hour, 23), minute),
-                        "category": "health",
-                    }
+                logger.warning(
+                    "AI parsing error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES, exc
                 )
 
-        return ParsedRoutine(
-            wake_time=wake_time,
-            sleep_time=sleep_time,
-            fixed_events=fixed_events,
-            flexible_tasks=flexible_tasks,
-        )
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(_RETRY_DELAYS[attempt])
 
-    def _extract_time(self, text: str, keywords: list[str]) -> time | None:
-        is_sleep = any("sleep" in k or "bed" in k for k in keywords)
-        for keyword in keywords:
-            pattern = rf"{keyword}\s*(?:at\s*)?(\d{{1,2}})(?::(\d{{2}}))?\s*(am|pm)?"
-            match = re.search(pattern, text)
-            if match:
-                hour = int(match.group(1))
-                minute = int(match.group(2) or 0)
-                ampm = match.group(3)
-                if ampm == "pm" and hour < 12:
-                    hour += 12
-                elif ampm == "am" and hour == 12:
-                    hour = 0
-                elif not ampm and is_sleep and 1 <= hour < 12:
-                    hour = hour + 12 if hour < 12 else hour
-                return time(hour, minute)
-        return None
+        logger.warning("All AI attempts failed, using rule fallback: %s", last_error)
+        return self._fallback(data.routine_text)
 
-    def _to_time(self, hour: int, minute: int) -> time:
-        if hour < 8:
-            hour += 12
-        return time(hour, minute)
+    # ─── Partial recovery ──────────────────────────────────────────────
+
+    def _try_partial_recovery(self, raw: str) -> ParsedRoutine | None:
+        """Try to extract valid JSON from a truncated or slightly malformed response."""
+        import re
+
+        # Find the first { ... } block
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return None
+        try:
+            partial = json.loads(match.group())
+            return ParsedRoutine.model_validate(partial)
+        except Exception:
+            return None
+
+    # ─── Rule fallback ─────────────────────────────────────────────────
+
+    def _fallback(self, text: str) -> ParsedRoutine:
+        result = parse_with_rules(text)
+        return ParsedRoutine.model_validate(result)

@@ -1,3 +1,13 @@
+"""AI schedule analysis service — parse a natural language text and extract tasks.
+
+Includes:
+- AI-powered analysis with retry + exponential backoff
+- Rule-based fallback
+- Optional auto-persist of extracted tasks to DB
+- JSON schema validation before model parsing
+"""
+
+import asyncio
 import json
 from datetime import datetime
 from uuid import UUID
@@ -11,7 +21,7 @@ from app.core.logger import get_logger
 from app.models import AIAnalysis, Task, TaskCategory, TaskPriority
 from app.repositories.task_repository import TaskRepository
 from app.schemas.schedule import AIAnalyzeRequest, AIAnalyzeResponse, AIAnalyzeTask
-from app.services.ai.routine_parser import AIRoutineParserService
+from app.services.ai.rule_parser import parse_with_rules
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -44,20 +54,33 @@ Rules:
 - For events with time ranges (e.g., "Gym from 8 to 9"), set start and end
 - For flexible tasks (e.g., "Study 2 hours"), set duration only
 - Infer categories from context
-- If user mentions deadlines (e.g. "by friday"), convert to a reasonable ISO timestamp (assumed next occurrence)
-- If task repeats (e.g. "every day"), set is_recurring=true and provide an RFC5545 RRULE (e.g., FREQ=DAILY)
+- If user mentions deadlines (e.g. "by friday"), convert to a reasonable ISO timestamp
+- If task repeats (e.g. "every day"), set is_recurring=true and provide RRULE (e.g., FREQ=DAILY)
+
+--- EXAMPLE ---
+
+Input: "Wake up at 7, gym 8-9, study 3 hours for exams by Friday, sleep at 11pm"
+Output:
+{
+  "tasks": [
+    {"title": "Gym", "start": "08:00", "end": "09:00", "duration": 60, "category": "health", "priority": "medium", "deadline": null, "is_recurring": false, "recurrence_rule": null},
+    {"title": "Study for Exams", "start": null, "end": null, "duration": 180, "category": "study", "priority": "urgent", "deadline": null, "is_recurring": false, "recurrence_rule": null}
+  ],
+  "wake_time": "07:00",
+  "sleep_time": "23:00",
+  "notes": null
+}
 """
+
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [0.5, 1.0, 2.0]
 
 
 class AIAnalyzeService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = (
-            AsyncGroq(
-                api_key=settings.groq_api_key,
-            )
-            if settings.groq_api_key
-            else None
+            AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
         )
 
     async def analyze(self, user_id: UUID, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
@@ -66,7 +89,7 @@ class AIAnalyzeService:
         else:
             result = self._analyze_with_rules(data)
 
-        # Persist the analysis
+        # Persist the analysis record
         analysis = AIAnalysis(
             user_id=user_id,
             input_text=data.text,
@@ -74,13 +97,14 @@ class AIAnalyzeService:
             model_used=settings.groq_model if self.client else "rule-based",
         )
         self.db.add(analysis)
-        
+
         if data.auto_persist:
             await self._persist_tasks(user_id, result.tasks)
-            
-        await self.db.commit()
 
+        await self.db.commit()
         return result
+
+    # ─── Validation ────────────────────────────────────────────────────
 
     def _validate_task(self, task: AIAnalyzeTask) -> None:
         if not task.title:
@@ -88,20 +112,106 @@ class AIAnalyzeService:
         if task.duration is not None and task.duration <= 0:
             raise ValidationError("Task duration must be strictly positive")
 
+    # ─── AI path ───────────────────────────────────────────────────────
+
+    async def _analyze_with_ai(self, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
+        last_error: Exception | None = None
+        content = ""
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = await self.client.chat.completions.create(  # type: ignore[union-attr]
+                    model=settings.groq_model,
+                    messages=[
+                        {"role": "system", "content": ANALYZE_PROMPT},
+                        {
+                            "role": "user",
+                            "content": f"Timezone: {data.timezone}\n\nRoutine:\n{data.text}",
+                        },
+                    ],
+                    temperature=0.1,
+                    response_format={"type": "json_object"},
+                    max_tokens=1000,
+                )
+                content = response.choices[0].message.content or ""
+                parsed_dict = json.loads(content)
+
+                # Validate required top-level keys
+                if "tasks" not in parsed_dict:
+                    raise ValueError("Missing 'tasks' key in AI response")
+
+                return AIAnalyzeResponse.model_validate(parsed_dict)
+
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                logger.warning(
+                    "AI analysis invalid JSON (attempt %d/%d): %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    exc,
+                )
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "AI analysis error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES, exc
+                )
+
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(_RETRY_DELAYS[attempt])
+
+        logger.warning("All AI analysis attempts failed, using rule fallback: %s", last_error)
+        return self._analyze_with_rules(data)
+
+    # ─── Rule-based fallback ───────────────────────────────────────────
+
+    def _analyze_with_rules(self, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
+        parsed = parse_with_rules(data.text)
+        tasks: list[AIAnalyzeTask] = []
+
+        for event in parsed.get("fixed_events", []):
+            start = event["start"]
+            end = event["end"]
+            tasks.append(
+                AIAnalyzeTask(
+                    title=event["title"],
+                    start=start.strftime("%H:%M") if hasattr(start, "strftime") else str(start),
+                    end=end.strftime("%H:%M") if hasattr(end, "strftime") else str(end),
+                    category=event.get("category"),
+                )
+            )
+
+        for flex in parsed.get("flexible_tasks", []):
+            tasks.append(
+                AIAnalyzeTask(
+                    title=flex["title"],
+                    duration=flex.get("duration"),
+                    category=flex.get("category"),
+                    priority=flex.get("priority"),
+                )
+            )
+
+        wt = parsed.get("wake_time")
+        st = parsed.get("sleep_time")
+        return AIAnalyzeResponse(
+            tasks=tasks,
+            wake_time=wt.strftime("%H:%M") if wt and hasattr(wt, "strftime") else (str(wt) if wt else None),
+            sleep_time=st.strftime("%H:%M") if st and hasattr(st, "strftime") else (str(st) if st else None),
+        )
+
+    # ─── Persist tasks ─────────────────────────────────────────────────
+
     async def _persist_tasks(self, user_id: UUID, tasks: list[AIAnalyzeTask]) -> None:
         task_repo = TaskRepository(self.db)
         for t in tasks:
             self._validate_task(t)
-            
-            # Convert string priority to enum
+
             priority_val = TaskPriority.MEDIUM
             if t.priority:
                 try:
                     priority_val = TaskPriority(t.priority.lower())
                 except ValueError:
                     pass
-            
-            # Convert string category to enum
+
             category_val = TaskCategory.OTHER
             if t.category:
                 try:
@@ -119,7 +229,7 @@ class AIAnalyzeService:
                 recurrence_rule={"rrule": t.recurrence_rule} if t.recurrence_rule else None,
                 deadline=t.deadline,
             )
-            
+
             if t.start and t.end:
                 try:
                     start_time = datetime.strptime(t.start, "%H:%M").time()
@@ -129,61 +239,5 @@ class AIAnalyzeService:
                     db_task.fixed_end = end_time
                 except ValueError:
                     pass
-                    
+
             self.db.add(db_task)
-
-    async def _analyze_with_ai(self, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
-        try:
-            response = await self.client.chat.completions.create(
-                model=settings.groq_model,
-                messages=[
-                    {"role": "system", "content": ANALYZE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": f"Timezone: {data.timezone}\n\nRoutine:\n{data.text}",
-                    },
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
-            parsed = json.loads(content)
-            return AIAnalyzeResponse.model_validate(parsed)
-        except Exception as exc:
-            logger.warning("AI analysis failed, falling back to rules: %s", exc)
-            return self._analyze_with_rules(data)
-
-    def _analyze_with_rules(self, data: AIAnalyzeRequest) -> AIAnalyzeResponse:
-        # Use the existing rule-based parser
-        parser = AIRoutineParserService()
-
-        parsed = parser._parse_with_rules(data.text)
-
-        tasks = []
-        for event in parsed.fixed_events:
-            tasks.append(
-                AIAnalyzeTask(
-                    title=event.title,
-                    start=event.start.strftime("%H:%M") if event.start else None,
-                    end=event.end.strftime("%H:%M") if event.end else None,
-                    category=event.category,
-                )
-            )
-
-        for flex in parsed.flexible_tasks:
-            tasks.append(
-                AIAnalyzeTask(
-                    title=flex.title,
-                    duration=flex.duration,
-                    category=flex.category,
-                    priority=flex.priority,
-                )
-            )
-
-        return AIAnalyzeResponse(
-            tasks=tasks,
-            wake_time=parsed.wake_time.strftime("%H:%M") if parsed.wake_time else None,
-            sleep_time=(
-                parsed.sleep_time.strftime("%H:%M") if parsed.sleep_time else None
-            ),
-        )
