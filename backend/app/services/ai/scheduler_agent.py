@@ -12,11 +12,14 @@ from app.models import Task
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.schedule import (
+    AIAnalyzeTask,
     ChatRequest,
     ChatResponse,
     ParseRoutineRequest,
     ScheduleGenerateRequest,
 )
+from app.services.ai.clarification_service import ClarificationService
+from app.services.ai.conversation_service import ConversationService
 from app.services.ai.routine_parser import AIRoutineParserService
 from app.services.scheduling.engine import SchedulingEngine
 
@@ -86,7 +89,7 @@ class AIChatService:
                                 "description": "Start time in HH:MM format if fixed, otherwise omit",
                             },
                         },
-                        "required": ["title", "duration"],
+                        "required": ["title"],
                     },
                 },
             },
@@ -127,21 +130,43 @@ class AIChatService:
         ]
 
         try:
-            messages = [
+            conv_service = ConversationService(self.db)
+            conversation = await conv_service.get_or_create_active_conversation(self.user_id)
+
+            await conv_service.add_message(conversation.id, "user", data.message)
+
+            messages = []
+            
+            if conversation.state and conversation.state.current_state == "GATHERING_ROUTINE_INFO":
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": f"You are currently gathering missing information for a task. Previous missing fields data: {json.dumps(conversation.state.missing_fields)}. Once you have the missing info, call create_task.",
+                    }
+                )
+
+            messages.append(
                 {
                     "role": "system",
                     "content": "You are a helpful schedule and productivity assistant. Use the provided tools to create, reschedule, or delete tasks if the user asks. If you modify a task, tell the user.",
-                },
-                {"role": "user", "content": data.message},
-            ]
+                }
+            )
+            
             if data.context:
-                messages.insert(
-                    1,
+                messages.append(
                     {
                         "role": "system",
                         "content": f"Context (Today's Tasks): {json.dumps(data.context)}",
-                    },
+                    }
                 )
+
+            # Append historical messages
+            for msg in conversation.messages:
+                messages.append({"role": msg.role, "content": msg.content})
+
+            # The last message is the one we just added
+            if not conversation.messages or conversation.messages[-1].content != data.message:
+                 messages.append({"role": "user", "content": data.message})
 
             response = await self.client.chat.completions.create(
                 model=settings.groq_model,
@@ -176,11 +201,21 @@ class AIChatService:
                                 )
                     elif tool_call.function.name == "create_task":
                         args = json.loads(tool_call.function.arguments)
+                        title = args.get("title")
+                        duration = args.get("duration")
                         
+                        if not duration:
+                            clarifier = ClarificationService()
+                            question = clarifier.clarify_task(AIAnalyzeTask(title=title))
+                            if question:
+                                await conv_service.update_state(conversation.id, "GATHERING_ROUTINE_INFO", {"title": title})
+                                await conv_service.add_message(conversation.id, "assistant", question)
+                                return ChatResponse(reply=question)
+                                
                         task_obj = Task(
                             user_id=self.user_id,
-                            title=args.get("title"),
-                            duration=args.get("duration"),
+                            title=title,
+                            duration=duration,
                         )
                         if args.get("fixed_start"):
                             hour, minute = map(int, args.get("fixed_start").split(":"))
@@ -188,6 +223,10 @@ class AIChatService:
                             task_obj.fixed_start = time(hour, minute)
 
                         await task_repo.create(task_obj)
+                        
+                        # Reset state if we were gathering info
+                        if conversation.state and conversation.state.current_state == "GATHERING_ROUTINE_INFO":
+                            await conv_service.update_state(conversation.id, "DEFAULT", {})
                     elif tool_call.function.name == "delete_task":
                         args = json.loads(tool_call.function.arguments)
                         t_id = args.get("task_id")
@@ -214,9 +253,11 @@ class AIChatService:
                                     ScheduleGenerateRequest(include_parsed_routine=parsed),
                                 )
 
+                await conv_service.add_message(conversation.id, "assistant", "I've updated your schedule as requested!")
                 return ChatResponse(reply="I've updated your schedule as requested!")
 
             reply = response_message.content or "I couldn't generate a response."
+            await conv_service.add_message(conversation.id, "assistant", reply)
             return ChatResponse(reply=reply)
         except Exception as exc:
             logger.error(f"AI chat error: {exc}")
