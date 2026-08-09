@@ -52,3 +52,11 @@ class TaskRepository(BaseRepository[Task]):
             .order_by(Task.priority.desc(), Task.deadline.asc().nullslast())
         )
         return list(result.scalars().all())
+
+    async def mark_completed(self, task: Task) -> Task:
+        task.completed = True
+        task.status = TaskStatus.COMPLETED
+        self.db.add(task)
+        await self.db.commit()
+        await self.db.refresh(task)
+        return task
