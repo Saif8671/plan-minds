@@ -81,15 +81,19 @@ class ParseRoutineRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     context: dict[str, Any] | None = None
+    conversation_id: UUID | None = Field(
+        default=None,
+        description="Optional: send to a specific conversation instead of the active one",
+    )
 
 
 class ChatResponse(BaseModel):
     reply: str
     suggested_actions: list[str] | None = None
+    actions_taken: list[str] | None = None
 
 
-# ─── Schedule generation schemas ────────────────────────────────────────
-
+# ─── Schedule block schemas ──────────────────────────────────────────────
 
 
 class ScheduleBlock(BaseModel):
@@ -100,6 +104,17 @@ class ScheduleBlock(BaseModel):
     task_id: UUID | None = None
     category: str | None = None
     is_fixed: bool = False
+    score: float | None = Field(default=None, description="Slot score used by the scheduler")
+
+
+class ScheduleBlockCreate(BaseModel):
+    """Create a new block manually inside an existing generated schedule."""
+    title: str = Field(min_length=1, max_length=255)
+    start: time
+    end: time
+    category: str | None = None
+    is_fixed: bool = False
+    task_id: UUID | None = None
 
 
 class ScheduleBlockUpdate(BaseModel):
@@ -107,6 +122,41 @@ class ScheduleBlockUpdate(BaseModel):
     start: time | None = None
     end: time | None = None
     category: str | None = None
+
+
+class ScheduleBlockMove(BaseModel):
+    """Move a block to a new time window."""
+    new_start: time
+    new_end: time
+
+
+class ScheduleSplitRequest(BaseModel):
+    """Split a block at a given time."""
+    split_at: time = Field(description="Time at which to split the block (must be between block start and end)")
+
+
+class ScheduleMergeRequest(BaseModel):
+    """Merge two adjacent blocks."""
+    block_ids: list[str] = Field(min_length=2, max_length=2, description="Exactly 2 block IDs to merge")
+    merged_title: str | None = Field(default=None, max_length=255, description="Title for merged block")
+
+
+# ─── Validation schemas ──────────────────────────────────────────────────
+
+
+class ConflictDetailResponse(BaseModel):
+    rule: str
+    message: str
+    block_ids: list[str]
+    severity: str  # "error" | "warning"
+
+
+class ValidationResultResponse(BaseModel):
+    is_valid: bool
+    conflicts: list[ConflictDetailResponse]
+
+
+# ─── Schedule generation schemas ─────────────────────────────────────────
 
 
 class GeneratedSchedule(BaseModel):
@@ -117,6 +167,7 @@ class GeneratedSchedule(BaseModel):
     unscheduled_tasks: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
+    validation: ValidationResultResponse | None = None
 
 
 class ScheduleGenerateRequest(BaseModel):
@@ -134,13 +185,16 @@ class ScheduleRegenerateRequest(BaseModel):
     skipped_task_ids: list[UUID] = Field(default_factory=list)
 
 
-# ─── AI Analyze schemas ─────────────────────────────────────────────────
+# ─── AI Analyze schemas ──────────────────────────────────────────────────
 
 
 class AIAnalyzeRequest(BaseModel):
     text: str = Field(min_length=3, max_length=5000)
     timezone: str | None = "UTC"
-    auto_persist: bool = Field(default=False, description="Whether to automatically save extracted tasks to the database")
+    auto_persist: bool = Field(
+        default=False,
+        description="Automatically save extracted tasks to the database",
+    )
 
 
 class AIAnalyzeTask(BaseModel):

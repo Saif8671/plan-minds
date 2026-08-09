@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
@@ -14,18 +14,16 @@ class TaskCreate(BaseModel):
     labels: list[str] | None = None
     priority: TaskPriority = TaskPriority.MEDIUM
     category: TaskCategory = TaskCategory.OTHER
-    duration: int = Field(default=60, ge=1, le=1440)
-    travel_time_minutes: int = Field(default=0, ge=0, le=240)
-    deadline: datetime | None = None
-    reminder_time: datetime | None = None
     recurrence: RecurrenceType | None = None
     recurrence_rule: dict[str, Any] | None = None
     is_fixed: bool = False
     fixed_start: time | None = None
     fixed_end: time | None = None
     is_recurring: bool = False
-    schedule_id: UUID | None = None
-    status: TaskStatus = TaskStatus.PENDING
+
+    # These fields will be used to generate the first TaskOccurrence
+    duration: int = Field(default=60, ge=1, le=1440)
+    travel_time_minutes: int = Field(default=0, ge=0, le=240)
 
 
 class TaskUpdate(BaseModel):
@@ -35,19 +33,30 @@ class TaskUpdate(BaseModel):
     labels: list[str] | None = None
     priority: TaskPriority | None = None
     category: TaskCategory | None = None
-    duration: int | None = Field(default=None, ge=1, le=1440)
-    travel_time_minutes: int | None = Field(default=None, ge=0, le=240)
-    deadline: datetime | None = None
-    reminder_time: datetime | None = None
     recurrence: RecurrenceType | None = None
     recurrence_rule: dict[str, Any] | None = None
     is_fixed: bool | None = None
     fixed_start: time | None = None
     fixed_end: time | None = None
     is_recurring: bool | None = None
-    completed: bool | None = None
-    schedule_id: UUID | None = None
     status: TaskStatus | None = None
+    completed: bool | None = None
+    duration: int | None = None
+    travel_time_minutes: int | None = None
+    deadline: datetime | None = None
+    reminder_time: datetime | None = None
+
+
+class TaskOccurrenceUpdate(BaseModel):
+    status: TaskStatus | None = None
+    duration: int | None = Field(default=None, ge=1, le=1440)
+    travel_time_minutes: int | None = Field(default=None, ge=0, le=240)
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+
+
+class TaskSkipRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=512, description="Optional reason for skipping")
 
 
 class TaskActivityCreate(BaseModel):
@@ -59,24 +68,41 @@ class TaskResponse(BaseModel):
 
     id: UUID
     user_id: UUID
-    schedule_id: UUID | None = None
     title: str
     description: str | None = None
     notes: str | None = None
     labels: list[str] | None = None
-    completed: bool
     priority: TaskPriority
     category: TaskCategory
-    duration: int
-    travel_time_minutes: int = 0
-    deadline: datetime | None = None
-    reminder_time: datetime | None = None
     recurrence: RecurrenceType | None = None
     recurrence_rule: dict[str, Any] | None = None
     is_fixed: bool
     fixed_start: time | None = None
     fixed_end: time | None = None
     is_recurring: bool
-    status: TaskStatus
+    duration: int = 60
+    travel_time_minutes: int = 0
+    deadline: datetime | None = None
+    completed: bool = False
+    status: TaskStatus = TaskStatus.PENDING
+    reminder_time: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TaskOccurrenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    task_id: UUID
+    user_id: UUID
+    date: date
+    status: TaskStatus
+    duration: int
+    travel_time_minutes: int
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    task: TaskResponse | None = None
+
