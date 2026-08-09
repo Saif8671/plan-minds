@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/schedule_organizer"
     )
+    # Database connection pool settings
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800  # Recycle connections every 30 min
 
     secret_key: str = "change-me-to-a-long-random-secret-key"
     algorithm: str = "HS256"
@@ -49,6 +54,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
     log_level: str = "INFO"
+
+    # Optional integrations
+    redis_url: str = ""           # For Celery/caching (future use)
+    sentry_dsn: str = ""          # For error monitoring (Sentry)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
