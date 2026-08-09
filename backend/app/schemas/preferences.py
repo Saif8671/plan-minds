@@ -22,6 +22,13 @@ class UserPreferencesUpdate(BaseModel):
     notification_preferences: dict[str, Any] | None = None
     timezone: str | None = Field(default=None, max_length=64)
     working_days: list[str] | None = None
+    meals: dict[str, str] | None = Field(
+        default=None, description="Preferred meal times, e.g. {'breakfast': '08:00'}"
+    )
+    scheduling_style: str | None = Field(
+        default=None, description="strict | flexible"
+    )
+    default_buffer_time_minutes: int | None = Field(default=None, ge=0, le=120)
 
 
 class UserPreferencesResponse(BaseModel):
@@ -41,3 +48,6 @@ class UserPreferencesResponse(BaseModel):
     notification_preferences: dict[str, Any] | None = None
     timezone: str = "UTC"
     working_days: list[str] | None = None
+    meals: dict[str, str] | None = None
+    scheduling_style: str = "flexible"
+    default_buffer_time_minutes: int = 15
