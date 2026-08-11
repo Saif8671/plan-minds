@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { ScreenLayout } from '../../../components/layouts/ScreenLayout';
+import { EmptyState } from '../../../components/common/EmptyState';
+import { SkeletonLoader } from '../../../components/common/SkeletonLoader';
 import { ScheduleAPI, ScheduleDay } from '../../../api/schedule.api';
 import { Task } from '../../../api/dashboard.api';
 
@@ -126,22 +128,22 @@ export default function DailyScreen() {
       )}
 
       {isLoading && !isRefreshing ? (
-        <View className="flex-1 justify-center items-center py-20">
-          <ActivityIndicator size="large" color="#6366f1" />
-          <Text className="text-gray-500 mt-4">Loading your schedule...</Text>
+        <View className="flex-1 px-4 py-6">
+          {[1, 2, 3, 4, 5].map((item) => (
+            <View key={item} className="mb-6 flex-row">
+              <SkeletonLoader width={50} height={16} className="mt-1 mr-4" />
+              <SkeletonLoader width="100%" height={80} className="rounded-xl flex-1" />
+            </View>
+          ))}
         </View>
       ) : scheduleData?.tasks?.length === 0 ? (
-        <View className="flex-1 justify-center items-center py-20 px-4">
-          <Ionicons name="calendar-outline" size={48} color="#9ca3af" />
-          <Text className="text-gray-900 dark:text-white font-semibold text-lg mt-4 text-center">No schedule for today</Text>
-          <Text className="text-gray-500 text-center mt-2">Generate a schedule to get started</Text>
-          <TouchableOpacity 
-            className="bg-primary px-6 py-3 rounded-xl mt-6"
-            onPress={handleRegenerate}
-          >
-            <Text className="text-white font-medium">Generate Schedule</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon="calendar-outline"
+          title="No schedule for today"
+          description="Generate a schedule to get started"
+          actionLabel="Generate Schedule"
+          onAction={handleRegenerate}
+        />
       ) : (
         <ScrollView 
           className="flex-1 px-4"

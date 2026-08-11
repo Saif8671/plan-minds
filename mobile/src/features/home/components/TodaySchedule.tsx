@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { Card } from '../../../components/common/Card';
 import { Task } from '../../../api/dashboard.api';
 import { Ionicons } from '@expo/vector-icons';
+import { EmptyState } from '../../../components/common/EmptyState';
 import { cn } from '../../../utils/cn';
 
 interface TodayScheduleProps {
@@ -12,8 +13,20 @@ interface TodayScheduleProps {
 }
 
 export function TodaySchedule({ tasks, onTaskPress, onSeeAll }: TodayScheduleProps) {
-  if (!tasks || tasks.length === 0) return null;
-
+  if (!tasks || tasks.length === 0) {
+    return (
+      <View className="mb-6">
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="text-xl font-bold text-dark dark:text-white">Today's Schedule</Text>
+        </View>
+        <EmptyState 
+          icon="calendar-outline" 
+          title="No tasks yet" 
+          description="Your schedule is clear for today!"
+        />
+      </View>
+    );
+  }
   return (
     <View className="mb-6">
       <View className="flex-row items-center justify-between mb-4">

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import { ScreenLayout } from '../../../components/layouts/ScreenLayout';
 import { SkeletonLoader } from '../../../components/common/SkeletonLoader';
+import { Card } from '../../../components/common/Card';
 import { useAnalytics } from '../../../hooks/useAnalytics';
 import { ProductivityChart } from '../../../components/analytics/ProductivityChart';
 import { GoalProgress } from '../../../components/analytics/GoalProgress';
@@ -49,6 +50,23 @@ export default function InsightsScreen() {
         </View>
 
         <ProductivityChart data={data?.dailyStats || []} />
+
+        {data?.topCategories && data.topCategories.length > 0 && (
+          <View className="mb-6 mt-2">
+            <Text className="text-xl font-bold text-dark dark:text-white mb-4">Time Allocation</Text>
+            <View className="bg-white dark:bg-dark-paper rounded-2xl p-4 border border-gray-100 dark:border-gray-800">
+              {data.topCategories.map((category, index) => (
+                <View key={category.name} className={`flex-row items-center justify-between ${index !== data.topCategories.length - 1 ? 'mb-4' : ''}`}>
+                  <View className="flex-row items-center">
+                    <View className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: category.color }} />
+                    <Text className="text-base text-gray-800 dark:text-gray-200">{category.name}</Text>
+                  </View>
+                  <Text className="text-base font-bold text-gray-900 dark:text-white">{category.value}%</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <Text className="text-xl font-bold text-dark dark:text-white mb-4 mt-2">
           AI Observations

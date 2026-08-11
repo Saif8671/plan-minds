@@ -12,3 +12,6 @@ venv/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+serviceAccountKey.json
+*.json
+serviceAccountKey.json  

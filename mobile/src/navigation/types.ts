@@ -44,4 +44,6 @@ export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Onboarding: NavigatorScreenParams<OnboardingStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
+  Calendar: NavigatorScreenParams<CalendarStackParamList>;
+  Reminders: undefined;
 };

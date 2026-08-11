@@ -11,6 +11,7 @@ import { AISuggestionCard } from '../components/AISuggestionCard';
 import { TodaySchedule } from '../components/TodaySchedule';
 import { UpcomingTasks } from '../components/UpcomingTasks';
 import { QuickActions } from '../components/QuickActions';
+import { GamificationWidget } from '../components/GamificationWidget';
 
 type NavigationProp = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
@@ -40,6 +41,7 @@ export default function HomeScreen() {
     >
       <View className="px-4 pt-6 pb-20">
         <GreetingCard metrics={data?.metrics} />
+        <GamificationWidget />
 
         {data?.aiSuggestions?.map((suggestion) => (
           <AISuggestionCard
@@ -60,6 +62,8 @@ export default function HomeScreen() {
           onAddEvent={() => console.log('Add event')}
           onAskAI={() => navigation.navigate('Assistant')}
           onFocusMode={() => console.log('Focus')}
+          onCalendar={() => (navigation.getParent() as any)?.navigate('Calendar')}
+          onReminders={() => (navigation.getParent() as any)?.navigate('Reminders')}
         />
 
         <UpcomingTasks 

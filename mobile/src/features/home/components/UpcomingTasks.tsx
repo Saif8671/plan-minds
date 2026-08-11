@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { Card } from '../../../components/common/Card';
 import { Task } from '../../../api/dashboard.api';
 import { Ionicons } from '@expo/vector-icons';
+import { EmptyState } from '../../../components/common/EmptyState';
 import { cn } from '../../../utils/cn';
 
 interface UpcomingTasksProps {
@@ -11,8 +12,18 @@ interface UpcomingTasksProps {
 }
 
 export function UpcomingTasks({ tasks, onTaskPress }: UpcomingTasksProps) {
-  if (!tasks || tasks.length === 0) return null;
-
+  if (!tasks || tasks.length === 0) {
+    return (
+      <View className="mb-6">
+        <Text className="text-xl font-bold text-dark dark:text-white mb-4">Upcoming</Text>
+        <EmptyState 
+          icon="list-outline" 
+          title="No upcoming tasks" 
+          description="You are all caught up!"
+        />
+      </View>
+    );
+  }
   return (
     <View className="mb-6">
       <Text className="text-xl font-bold text-dark dark:text-white mb-4">Upcoming</Text>

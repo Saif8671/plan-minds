@@ -5,6 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScheduleStackParamList } from '../../../navigation/types';
 import { ScreenLayout } from '../../../components/layouts/ScreenLayout';
 import { SkeletonLoader } from '../../../components/common/SkeletonLoader';
+import { EmptyState } from '../../../components/common/EmptyState';
 import { useDailySchedule, useRegenerateSchedule } from '../../../hooks/useSchedule';
 import { TimeBlock } from '../components/TimeBlock';
 import { RegenerateButton } from '../components/RegenerateButton';
@@ -79,9 +80,11 @@ export default function ScheduleScreen() {
         })}
         
         {data?.tasks.length === 0 && (
-          <View className="items-center justify-center py-20">
-            <Text className="text-gray-500 text-lg">No tasks scheduled for today.</Text>
-          </View>
+          <EmptyState
+            icon="calendar-outline"
+            title="No tasks scheduled"
+            description="You have no tasks scheduled for this day."
+          />
         )}
       </ScrollView>
     </ScreenLayout>

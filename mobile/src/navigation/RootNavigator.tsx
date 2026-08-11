@@ -7,6 +7,8 @@ import SplashScreen from '../features/auth/screens/SplashScreen';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
+import CalendarNavigator from './CalendarNavigator';
+import RemindersScreen from '../features/reminders/screens/RemindersScreen';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync().catch(() => {});
@@ -39,7 +41,19 @@ export default function RootNavigator() {
       ) : !hasCompletedOnboarding ? (
         <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
       ) : (
-        <Stack.Screen name="Main" component={MainNavigator} />
+        <>
+          <Stack.Screen name="Main" component={MainNavigator} />
+          <Stack.Screen 
+            name="Calendar" 
+            component={CalendarNavigator} 
+            options={{ presentation: 'modal' }} 
+          />
+          <Stack.Screen 
+            name="Reminders" 
+            component={RemindersScreen} 
+            options={{ presentation: 'modal' }} 
+          />
+        </>
       )}
     </Stack.Navigator>
   );
