@@ -1,0 +1,29 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ScheduleAPI } from '../api/schedule.api';
+import { ErrorHandler } from '../errors/errorHandler';
+import { toast } from '../store/toastStore';
+
+export const SCHEDULE_QUERY_KEY = 'schedule';
+
+export function useDailySchedule(date: string) {
+  return useQuery({
+    queryKey: [SCHEDULE_QUERY_KEY, date],
+    queryFn: () => ScheduleAPI.getDailySchedule(date),
+    meta: {
+      errorMessage: 'Failed to load schedule',
+    },
+  });
+}
+
+export function useRegenerateSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (date: string) => ScheduleAPI.regenerateSchedule(date),
+    onSuccess: (data, date) => {
+      queryClient.setQueryData([SCHEDULE_QUERY_KEY, date], data);
+      toast.success('Schedule Optimized', 'AI has resolved your conflicts.');
+    },
+    onError: (error) => ErrorHandler.handle(error, 'Failed to regenerate schedule'),
+  });
+}
