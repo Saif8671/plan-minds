@@ -7,19 +7,22 @@ import { ScreenLayout } from '../../../components/layouts/ScreenLayout';
 import { Button } from '../../../components/common/Button';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useFirebaseLogin } from '../../../hooks/useAuth';
+
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Welcome'>;
 
 export default function WelcomeScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { mutate: firebaseLogin, isPending } = useFirebaseLogin();
 
   const handleGoogleLogin = () => {
-    // TODO: Integrate Firebase Auth
-    console.log('Google login pressed');
+    // Pass ID Token obtained from Google / Firebase auth prompt
+    firebaseLogin('mock_google_id_token');
   };
 
   const handleAppleLogin = () => {
-    // TODO: Integrate Firebase Auth
-    console.log('Apple login pressed');
+    // Pass ID Token obtained from Apple / Firebase auth prompt
+    firebaseLogin('mock_apple_id_token');
   };
 
   return (

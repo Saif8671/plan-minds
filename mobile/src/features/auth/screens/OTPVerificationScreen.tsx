@@ -57,9 +57,8 @@ export default function OTPVerificationScreen() {
     const finalCode = code || otp.join('');
     if (finalCode.length === 6) {
       verifyOTP({ email, otp: finalCode }, {
-        onSuccess: () => {
-          // Pass a dummy token since verifyOTP doesn't return one in this mock
-          navigation.navigate('ResetPassword', { token: 'mock_token_123' });
+        onSuccess: (res: any) => {
+          navigation.navigate('ResetPassword', { token: res?.reset_token || finalCode });
         }
       });
     }

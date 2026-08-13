@@ -38,4 +38,7 @@ export const ENDPOINTS = {
   GAMIFICATION: {
     BASE: '/gamification',
   },
+  DASHBOARD: {
+    GET: '/analytics/dashboard',
+  },
 } as const;

@@ -37,6 +37,6 @@ export interface DashboardData {
 export const DashboardAPI = {
   getDashboardData: async (): Promise<DashboardData> => {
     const response = await apiClient.get(ENDPOINTS.DASHBOARD.GET);
-    return response.data;
+    return response.data?.data || response.data;
   },
 };

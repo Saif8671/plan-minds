@@ -35,19 +35,21 @@ export const AuthAPI = {
     return response.data;
   },
 
-  forgotPassword: async (email: string): Promise<void> => {
-    // Assuming backend has this, if not mocked temporarily
-    // await apiClient.post('/auth/forgot-password', { email });
-    return new Promise((resolve) => setTimeout(resolve, 1000));
+  firebaseLogin: async (idToken: string): Promise<AuthResponse> => {
+    const response = await apiClient.post(ENDPOINTS.AUTH.FIREBASE, { id_token: idToken });
+    return response.data;
   },
 
-  verifyOTP: async (email: string, otp: string): Promise<void> => {
-    // await apiClient.post('/auth/verify-otp', { email, otp });
-    return new Promise((resolve) => setTimeout(resolve, 1000));
+  forgotPassword: async (email: string): Promise<void> => {
+    await apiClient.post('/auth/forgot-password', { email });
+  },
+
+  verifyOTP: async (email: string, otp: string): Promise<{ reset_token?: string }> => {
+    const response = await apiClient.post('/auth/verify-otp', { email, otp });
+    return response.data?.data || response.data || { reset_token: otp };
   },
 
   resetPassword: async (token: string, password: string): Promise<void> => {
-    // await apiClient.post('/auth/reset-password', { token, password });
-    return new Promise((resolve) => setTimeout(resolve, 1000));
+    await apiClient.post('/auth/reset-password', { token, password });
   },
 };

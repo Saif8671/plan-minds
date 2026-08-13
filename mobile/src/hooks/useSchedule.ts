@@ -27,3 +27,11 @@ export function useRegenerateSchedule() {
     onError: (error) => ErrorHandler.handle(error, 'Failed to regenerate schedule'),
   });
 }
+
+export function useTaskDetail(taskId: string) {
+  return useQuery({
+    queryKey: ['taskDetail', taskId],
+    queryFn: () => ScheduleAPI.getTaskById(taskId),
+    enabled: !!taskId,
+  });
+}

@@ -8,6 +8,8 @@ import { Button } from '../../../components/common/Button';
 import { Ionicons } from '@expo/vector-icons';
 import { cn } from '../../../utils/cn';
 
+import { useTaskDetail } from '../../../hooks/useSchedule';
+
 type RouteType = RouteProp<ScheduleStackParamList, 'TaskDetail'>;
 type NavigationProp = NativeStackNavigationProp<ScheduleStackParamList, 'TaskDetail'>;
 
@@ -16,16 +18,17 @@ export default function TaskDetailScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { taskId } = route.params;
 
-  // Mock task data for the ID
-  const task = {
+  const { data: fetchedTask } = useTaskDetail(taskId);
+
+  const task = fetchedTask || {
     id: taskId,
-    title: 'Client Meeting Prep',
-    description: 'Review the latest designs and prepare the presentation deck for the Acme Corp meeting.',
+    title: 'Loading task...',
+    description: 'Fetching task details',
     status: 'pending',
-    priority: 'high',
-    startTime: '14:30',
-    endTime: '15:30',
-    date: 'August 11, 2026',
+    priority: 'medium',
+    startTime: '--:--',
+    endTime: '--:--',
+    date: 'Today',
     category: 'Work'
   };
 

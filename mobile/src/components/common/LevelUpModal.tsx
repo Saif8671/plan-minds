@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 import LottieView from 'lottie-react-native';
-import { useTheme } from '../../../providers/ThemeProvider';
+import { useTheme } from '../../providers/ThemeProvider';
 import { Ionicons } from '@expo/vector-icons';
 
 interface LevelUpModalProps {

@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import { ENDPOINTS } from './endpoints';
-import { OnboardingProfile } from '../types/onboarding.types';
+import { OnboardingProfile, UserPreferencesUpdate } from '../types/onboarding.types';
 
 export const PreferencesAPI = {
   getPreferences: async (): Promise<OnboardingProfile> => {
@@ -8,7 +8,7 @@ export const PreferencesAPI = {
     return response.data?.data;
   },
 
-  updatePreferences: async (data: Partial<OnboardingProfile>): Promise<void> => {
+  updatePreferences: async (data: UserPreferencesUpdate): Promise<void> => {
     await apiClient.patch(ENDPOINTS.PREFERENCES.UPDATE, data);
   },
 };

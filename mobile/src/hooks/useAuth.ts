@@ -60,3 +60,19 @@ export function useResetPassword() {
     onError: (error) => ErrorHandler.handle(error, 'Failed to reset password.'),
   });
 }
+
+export function useFirebaseLogin() {
+  const setUser = useAuthStore((state) => state.setUser);
+
+  return useMutation({
+    mutationFn: (idToken: string) => AuthAPI.firebaseLogin(idToken),
+    onSuccess: async (res) => {
+      await StorageService.setTokens(res.data.access_token, res.data.refresh_token);
+      setUser(res.data.user);
+      toast.success('Welcome!', 'Successfully authenticated.');
+    },
+    onError: (error) => {
+      ErrorHandler.handle(error, 'Firebase authentication failed.');
+    },
+  });
+}

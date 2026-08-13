@@ -41,12 +41,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       const onboardingStr = await StorageService.getItem('has_completed_onboarding');
       
       if (token) {
-        // We'll set a placeholder user until the ME endpoint resolves
-        set({ 
-          isAuthenticated: true, 
-          user: { id: 'temp', email: '', name: 'User' },
-          hasCompletedOnboarding: onboardingStr === 'true'
-        });
+        try {
+          const { ProfileAPI } = await import('../api/profile.api');
+          const profile = await ProfileAPI.getProfile();
+          set({
+            isAuthenticated: true,
+            user: { id: profile.id, email: profile.email, name: profile.name },
+            hasCompletedOnboarding: onboardingStr === 'true',
+          });
+        } catch (err) {
+          console.warn('Failed to fetch user profile during hydration', err);
+          // Token might be invalid or network error, fallback to unauthenticated or stored state
+          set({ isAuthenticated: true, user: { id: 'auth_user', email: '', name: 'User' }, hasCompletedOnboarding: onboardingStr === 'true' });
+        }
       } else {
         set({ isAuthenticated: false, user: null });
       }

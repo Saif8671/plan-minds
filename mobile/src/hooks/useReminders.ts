@@ -15,29 +15,9 @@ export function useReminders() {
   return useQuery({
     queryKey: ['reminders'],
     queryFn: async () => {
-      // Use existing endpoint, but fallback to mock data if it fails
-      try {
-        const response = await apiClient.get<{ data: Reminder[] }>(ENDPOINTS.REMINDERS.BASE);
-        return response.data.data;
-      } catch (error) {
-        console.warn('Failed to fetch reminders, using mock data', error);
-        return [
-          {
-            id: '1',
-            title: 'Prepare for meeting',
-            dueDate: new Date().toISOString(),
-            status: 'upcoming',
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            title: 'Call mom',
-            dueDate: new Date(Date.now() - 86400000).toISOString(),
-            status: 'missed',
-            createdAt: new Date().toISOString(),
-          }
-        ] as Reminder[];
-      }
+      const response = await apiClient.get<{ data: Reminder[] } | Reminder[]>(ENDPOINTS.REMINDERS.BASE);
+      const data = Array.isArray(response.data) ? response.data : response.data.data;
+      return data as Reminder[];
     },
   });
 }

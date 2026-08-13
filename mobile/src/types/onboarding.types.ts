@@ -30,3 +30,13 @@ export interface OnboardingProfile {
   notificationPrefs: NotificationPreferences;
   goals: UserGoals;
 }
+
+export interface UserPreferencesUpdate {
+  wake_time?: string;
+  sleep_time?: string;
+  work_start?: string;
+  work_end?: string;
+  timezone?: string;
+  notification_preferences?: NotificationPreferences;
+  working_days?: string[];
+}

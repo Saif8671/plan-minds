@@ -7,55 +7,32 @@ import { format, addDays } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { cn } from '../../../utils/cn';
 
+import { useDailySchedule } from '../../../hooks/useSchedule';
+
 export default function CalendarScreen() {
   const { colors, isDark } = useTheme();
   const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const { data: scheduleData } = useDailySchedule(currentDate);
 
   const onDateChanged = (date: string) => {
     setCurrentDate(date);
   };
 
-  const getMockEvents = () => {
-    const today = currentDate;
-    const tomorrow = format(addDays(new Date(currentDate), 1), 'yyyy-MM-dd');
-    
-    return {
-      [today]: [
-        {
-          start: `${today} 09:00:00`,
-          end: `${today} 10:30:00`,
-          title: 'Design Sync',
-          summary: 'Review new mobile mockups',
-          color: colors.primary,
-        },
-        {
-          start: `${today} 11:00:00`,
-          end: `${today} 12:00:00`,
-          title: 'Engineering All-Hands',
-          summary: 'Q3 Roadmap updates',
-          color: colors.accent,
-        },
-        {
-          start: `${today} 14:00:00`,
-          end: `${today} 15:30:00`,
-          title: 'Focus Time',
-          summary: 'Deep work on UI features',
-          color: colors.warning,
-        }
-      ],
-      [tomorrow]: [
-        {
-          start: `${tomorrow} 10:00:00`,
-          end: `${tomorrow} 11:00:00`,
-          title: '1:1 Manager',
-          summary: 'Weekly catchup',
-          color: colors.primary,
-        }
-      ]
-    };
+  const events = {
+    [currentDate]: (scheduleData?.tasks || []).map((task) => {
+      const startTime = task.startTime || '09:00';
+      const endTime = task.endTime || '10:00';
+      const formattedStart = startTime.length === 5 ? `${startTime}:00` : startTime;
+      const formattedEnd = endTime.length === 5 ? `${endTime}:00` : endTime;
+      return {
+        start: `${currentDate} ${formattedStart}`,
+        end: `${currentDate} ${formattedEnd}`,
+        title: task.title,
+        summary: task.description || '',
+        color: task.priority === 'high' ? colors.error : task.priority === 'medium' ? colors.warning : colors.primary,
+      };
+    }),
   };
-
-  const events = getMockEvents();
 
   return (
     <ScreenLayout padding={false}>
@@ -104,7 +81,7 @@ export default function CalendarScreen() {
                 backgroundColor: isDark ? colors.dark : '#ffffff',
                 timeLabelColor: colors.gray[500],
                 lineColor: isDark ? colors.gray[800] : colors.gray[200],
-              }
+              } as any
             }}
             showNowIndicator
             scrollToFirst

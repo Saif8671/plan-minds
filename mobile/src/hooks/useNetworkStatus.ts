@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
-// import NetInfo from '@react-native-community/netinfo';
 
 export function useNetworkStatus() {
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
-    // This is a placeholder for the actual NetInfo hook.
-    // In a real app, you would install @react-native-community/netinfo
-    // and use it like this:
-    // const unsubscribe = NetInfo.addEventListener(state => {
-    //   setIsOnline(state.isConnected ?? false);
-    // });
-    // return () => unsubscribe();
+    try {
+      // Dynamic import to handle environments where netinfo might be optional/mocked
+      const NetInfo = require('@react-native-community/netinfo');
+      const unsubscribe = NetInfo.addEventListener((state: any) => {
+        setIsOnline(state.isConnected ?? true);
+      });
+      return () => unsubscribe();
+    } catch {
+      // Fallback if netinfo native module isn't loaded in test environment
+      setIsOnline(true);
+    }
   }, []);
 
   return { isOnline };

@@ -180,4 +180,8 @@ class AIRoutineParserService:
 
     def _fallback(self, text: str) -> ParsedRoutine:
         result = parse_with_rules(text)
+        if not result.get("notes"):
+            result["notes"] = "Parsed using rule-based fallback engine."
+        else:
+            result["notes"] += " (Parsed using rule-based fallback engine)"
         return ParsedRoutine.model_validate(result)
