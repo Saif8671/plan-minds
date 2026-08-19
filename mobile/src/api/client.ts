@@ -4,7 +4,7 @@ import { StorageService } from '../services/storage.service';
 import { ENDPOINTS } from './endpoints';
 import { useAuthStore } from '../store/authStore';
 
-const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:8000/api/v1';
+const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || Constants.expoConfig?.extra?.apiUrl || 'http://localhost:8000/api/v1';
 
 export const apiClient = axios.create({
   baseURL: apiUrl,
@@ -28,6 +28,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    
+    // Don't attempt to refresh token for auth endpoints (login, register, etc)
+    if (originalRequest.url?.includes('/auth/')) {
+      return Promise.reject(error);
+    }
     
     // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {

@@ -13,8 +13,8 @@ export function TypingIndicator() {
         Animated.delay(delay),
         Animated.loop(
           Animated.sequence([
-            Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }),
-            Animated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
+            Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: false }),
+            Animated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: false }),
             Animated.delay(400)
           ])
         )

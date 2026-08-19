@@ -135,8 +135,8 @@ class SchedulingEngine:
             user, ScheduleGenerateRequest(target_date=target_date)
         )
 
-    async def get_today(self, user_id: UUID) -> ScheduleResponse | None:
-        schedule = await self.schedule_repo.get_by_user_and_date(user_id, date.today())
+    async def get_schedule_for_date(self, user_id: UUID, target_date: date) -> ScheduleResponse | None:
+        schedule = await self.schedule_repo.get_by_user_and_date(user_id, target_date)
         if not schedule:
             return None
         return ScheduleResponse.model_validate(schedule)

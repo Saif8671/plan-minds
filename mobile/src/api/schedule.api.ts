@@ -11,7 +11,7 @@ export interface ScheduleDay {
 export const ScheduleAPI = {
   getDailySchedule: async (date: string): Promise<ScheduleDay> => {
     try {
-      const response = await apiClient.get(`${ENDPOINTS.SCHEDULE.TODAY}?date=${date}`);
+      const response = await apiClient.get(`${ENDPOINTS.SCHEDULE.DAILY}?date=${date}`);
       
       const scheduleResponse = response.data?.data;
       
@@ -85,18 +85,7 @@ export const ScheduleAPI = {
         category: t.category || 'General',
       };
     } catch (error) {
-      console.warn(`Failed to fetch task ${taskId}, using fallback details`);
-      return {
-        id: taskId,
-        title: 'Task Details',
-        description: 'Task description details from server',
-        status: 'pending',
-        priority: 'high',
-        startTime: '14:30',
-        endTime: '15:30',
-        date: 'Today',
-        category: 'Work',
-      };
+      throw error;
     }
   },
 };

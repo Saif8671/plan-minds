@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.3",
     "@hookform/resolvers": "^5.7.1",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -16,6 +17,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "expo": "^54.0.36",
+    "expo-dev-client": "~6.0.21",
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
     "expo-linear-gradient": "~15.0.8",
@@ -27,6 +29,7 @@
     "lottie-react-native": "~7.3.1",
     "nativewind": "^4.2.6",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-hook-form": "^7.85.0",
     "react-native": "0.81.5",
     "react-native-calendars": "^1.1314.0",
@@ -36,6 +39,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-web": "^0.21.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^3.4.19",
     "zod": "^4.4.3",
@@ -53,8 +57,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "private": true

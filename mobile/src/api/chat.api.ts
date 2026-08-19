@@ -41,16 +41,8 @@ export const ChatAPI = {
   },
   
   getHistory: async (): Promise<ChatMessage[]> => {
-    // Currently, backend does not have an endpoint to fetch messages in a conversation, 
-    // it only has /ai/chat/conversations to list conversations. 
-    // For now, return an initial message.
-    return [
-      {
-        id: 'init',
-        role: 'assistant',
-        content: "Hi! I'm PlanMinds AI. How can I help you organize your day?",
-        timestamp: new Date().toISOString()
-      }
-    ];
+    // Currently, backend does not have an endpoint to fetch messages in a conversation.
+    // Return empty array and let the UI handle the "no history" state.
+    return [];
   }
 };

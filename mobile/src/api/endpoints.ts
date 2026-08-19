@@ -18,7 +18,7 @@ export const ENDPOINTS = {
   },
   SCHEDULE: {
     BASE: '/schedules',
-    TODAY: '/schedules/today/current',
+    DAILY: '/schedules/daily',
     WEEK: '/schedules/week/current',
     GENERATE: '/schedules/generate',
     REGENERATE: '/schedules/regenerate',
@@ -37,6 +37,8 @@ export const ENDPOINTS = {
   },
   GAMIFICATION: {
     BASE: '/gamification',
+    STATS: '/gamification/progress',
+    LEADERBOARD: '/gamification/leaderboard',
   },
   DASHBOARD: {
     GET: '/analytics/dashboard',

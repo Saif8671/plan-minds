@@ -61,6 +61,9 @@ TOOLS = [
                     "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
                     "category": {"type": "string", "enum": ["work", "study", "health", "personal", "meal", "sleep", "other"]},
                     "deadline": {"type": "string", "description": "ISO datetime deadline, e.g. 2026-08-10T17:00:00"},
+                    "is_fixed": {"type": "boolean", "description": "Whether the task has a fixed time"},
+                    "fixed_start": {"type": "string", "description": "HH:MM format start time"},
+                    "fixed_end": {"type": "string", "description": "HH:MM format end time"},
                 },
                 "required": ["title"],
             },
@@ -198,6 +201,7 @@ Guidelines:
 - Be concise and action-oriented
 - Call a tool BEFORE explaining what you did
 - When the user asks to reschedule, move, or update a task — do it, then confirm
+- If the user provides a list of tasks or a schedule, parse it and use the 'create_task' tool multiple times to add each of them. Use 'is_fixed', 'fixed_start', and 'fixed_end' for tasks with specific times.
 - If you need a task ID and it's ambiguous, ask the user to clarify which task
 - Always speak in first person: "I've moved your gym session..."
 """
@@ -234,14 +238,28 @@ Guidelines:
         # Tool execution loop
         actions_taken: list[str] = []
         for _ in range(5):  # Max 5 tool calls per turn
-            response = await self.client.chat.completions.create(
-                model=settings.groq_model,
-                messages=messages,
-                tools=TOOLS,
-                tool_choice="auto",
-                temperature=0.3,
-                max_tokens=1024,
-            )
+            try:
+                response = await self.client.chat.completions.create(
+                    model=settings.groq_model,
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto",
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+            except Exception as exc:
+                logger.error("Groq API error: %s", exc)
+                reply = "I'm sorry, I encountered an error while processing your request. Please try again."
+                assistant_msg = ConversationMessage(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=reply,
+                )
+                self.db.add(assistant_msg)
+                conversation.updated_at = datetime.now(UTC)
+                await self.db.flush()
+                return ChatResponse(reply=reply, actions_taken=actions_taken if actions_taken else None)
+
             msg = response.choices[0].message
 
             if not msg.tool_calls:
@@ -335,6 +353,7 @@ Guidelines:
         self, user_id: UUID, args: dict, actions_taken: list[str]
     ) -> dict:
         from app.models import Task, TaskCategory, TaskPriority
+        from datetime import time
 
         task = Task(
             user_id=user_id,
@@ -342,12 +361,34 @@ Guidelines:
             duration=args.get("duration", 60),
             priority=TaskPriority(args.get("priority", "medium")),
             category=TaskCategory(args.get("category", "other")),
+            is_fixed=args.get("is_fixed", False),
         )
         if args.get("deadline"):
             try:
                 task.deadline = datetime.fromisoformat(args["deadline"])
             except ValueError:
                 pass
+
+        if args.get("is_fixed") and args.get("fixed_start") and args.get("fixed_end"):
+            for time_str in (args.get("fixed_start"), args.get("fixed_end")):
+                pass # just a placeholder for loop syntax
+            
+            def parse_time(ts: str):
+                ts = ts.strip().upper()
+                try:
+                    return time.fromisoformat(ts)
+                except ValueError:
+                    try:
+                        from datetime import datetime
+                        return datetime.strptime(ts, "%I:%M %p").time()
+                    except ValueError:
+                        return None
+
+            fs = parse_time(args.get("fixed_start"))
+            fe = parse_time(args.get("fixed_end"))
+            if fs and fe:
+                task.fixed_start = fs
+                task.fixed_end = fe
 
         task = await self.task_repo.create(task)
         actions_taken.append(f"Created task: '{task.title}'")

@@ -23,15 +23,29 @@ export default function GoalsScreen() {
   const updateProfile = useOnboardingStore((state) => state.updateProfile);
   const submitProfile = useOnboardingStore((state) => state.submitProfile);
 
-  const [primaryGoal, setPrimaryGoal] = useState<any>(profile.goals?.primaryGoal || 'productivity');
+  const [selectedGoals, setSelectedGoals] = useState<string[]>(
+    Array.isArray(profile.goals?.primaryGoal) 
+      ? profile.goals.primaryGoal 
+      : [profile.goals?.primaryGoal || 'productivity']
+  );
   const [focusHoursTarget, setFocusHoursTarget] = useState(profile.goals?.focusHoursTarget || 4);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const toggleGoal = (id: string) => {
+    if (selectedGoals.includes(id)) {
+      if (selectedGoals.length > 1) {
+        setSelectedGoals(selectedGoals.filter(g => g !== id));
+      }
+    } else {
+      setSelectedGoals([...selectedGoals, id]);
+    }
+  };
 
   const handleComplete = async () => {
     setIsSubmitting(true);
     updateProfile({
       goals: {
-        primaryGoal,
+        primaryGoal: selectedGoals as any, // Store as array
         focusHoursTarget,
       },
     });
@@ -56,11 +70,11 @@ export default function GoalsScreen() {
 
         <View className="flex-row flex-wrap justify-between gap-y-4 mb-8">
           {GOAL_OPTIONS.map((goal) => {
-            const isSelected = primaryGoal === goal.id;
+            const isSelected = selectedGoals.includes(goal.id);
             return (
               <TouchableOpacity
                 key={goal.id}
-                onPress={() => setPrimaryGoal(goal.id)}
+                onPress={() => toggleGoal(goal.id)}
                 className={cn(
                   "w-[48%] aspect-square p-4 rounded-2xl border items-center justify-center",
                   isSelected ? "bg-primary/5 border-primary" : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"

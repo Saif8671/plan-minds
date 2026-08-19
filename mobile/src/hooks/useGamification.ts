@@ -17,7 +17,7 @@ export function useGamification() {
   return useQuery({
     queryKey: ['gamification'],
     queryFn: async () => {
-      const response = await apiClient.get<{ data: GamificationStats } | GamificationStats>(ENDPOINTS.GAMIFICATION.BASE);
+      const response = await apiClient.get<{ data: GamificationStats } | GamificationStats>(ENDPOINTS.GAMIFICATION.STATS);
       const data = 'data' in response.data ? response.data.data : response.data;
       return data as GamificationStats;
     },

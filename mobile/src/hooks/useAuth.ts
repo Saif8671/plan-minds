@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { StorageService } from '../services/storage.service';
 import { ErrorHandler } from '../errors/errorHandler';
 import { toast } from '../store/toastStore';
+import { ProfileAPI } from '../api/profile.api';
 
 export function useLogin() {
   const setUser = useAuthStore((state) => state.setUser);
@@ -12,7 +13,12 @@ export function useLogin() {
     mutationFn: (data: LoginRequest) => AuthAPI.login(data),
     onSuccess: async (res) => {
       await StorageService.setTokens(res.data.access_token, res.data.refresh_token);
-      setUser(res.data.user);
+      try {
+        const profile = await ProfileAPI.getProfile();
+        setUser({ id: profile.id, email: profile.email, name: profile.name });
+      } catch (err) {
+        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+      }
       toast.success('Welcome back!', 'Successfully logged in.');
     },
     onError: (error) => {
@@ -28,7 +34,12 @@ export function useRegister() {
     mutationFn: (data: RegisterRequest) => AuthAPI.register(data),
     onSuccess: async (res) => {
       await StorageService.setTokens(res.data.access_token, res.data.refresh_token);
-      setUser(res.data.user);
+      try {
+        const profile = await ProfileAPI.getProfile();
+        setUser({ id: profile.id, email: profile.email, name: profile.name });
+      } catch (err) {
+        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+      }
       toast.success('Account created', 'Welcome to PlanMinds!');
     },
     onError: (error) => {
@@ -68,7 +79,12 @@ export function useFirebaseLogin() {
     mutationFn: (idToken: string) => AuthAPI.firebaseLogin(idToken),
     onSuccess: async (res) => {
       await StorageService.setTokens(res.data.access_token, res.data.refresh_token);
-      setUser(res.data.user);
+      try {
+        const profile = await ProfileAPI.getProfile();
+        setUser({ id: profile.id, email: profile.email, name: profile.name });
+      } catch (err) {
+        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+      }
       toast.success('Welcome!', 'Successfully authenticated.');
     },
     onError: (error) => {

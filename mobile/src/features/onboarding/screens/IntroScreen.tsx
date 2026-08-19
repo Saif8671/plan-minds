@@ -40,7 +40,9 @@ export default function IntroScreen() {
 
   const handleNext = () => {
     if (currentIndex < slides.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+      const nextIndex = currentIndex + 1;
+      flatListRef.current?.scrollToOffset({ offset: nextIndex * SCREEN_WIDTH, animated: true });
+      setCurrentIndex(nextIndex);
     } else {
       navigation.navigate('Permissions');
     }

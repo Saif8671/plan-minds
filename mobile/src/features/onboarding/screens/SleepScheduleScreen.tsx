@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../../navigation/types';
@@ -42,7 +42,15 @@ export default function SleepScheduleScreen() {
           <View className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
             <Text className="text-sm text-gray-500 mb-1">Bedtime</Text>
             <View className="flex-row items-center">
-              <Text className="text-xl font-bold text-dark dark:text-white flex-1">{bedtime}</Text>
+              <TextInput 
+                className="text-xl font-bold text-dark dark:text-white flex-1"
+                value={bedtime}
+                onChangeText={setBedtime}
+                placeholder="23:00"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+                placeholderTextColor="#94A3B8"
+              />
               <Ionicons name="moon-outline" size={20} color="#7A3EF3" />
             </View>
           </View>
@@ -52,7 +60,15 @@ export default function SleepScheduleScreen() {
           <View className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
             <Text className="text-sm text-gray-500 mb-1">Wake Up</Text>
             <View className="flex-row items-center">
-              <Text className="text-xl font-bold text-dark dark:text-white flex-1">{wakeUpTime}</Text>
+              <TextInput 
+                className="text-xl font-bold text-dark dark:text-white flex-1"
+                value={wakeUpTime}
+                onChangeText={setWakeUpTime}
+                placeholder="07:00"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+                placeholderTextColor="#94A3B8"
+              />
               <Ionicons name="sunny-outline" size={20} color="#F59E0B" />
             </View>
           </View>

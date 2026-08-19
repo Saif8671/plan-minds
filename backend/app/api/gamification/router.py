@@ -8,15 +8,21 @@ from app.services.gamification.xp_service import GamificationService
 router = APIRouter(prefix="/gamification", tags=["Gamification"])
 
 
-@router.get("/stats", response_model=ApiResponse[UserStatsResponse])
+@router.get("/progress", response_model=ApiResponse[UserStatsResponse])
 async def get_user_stats(current_user: CurrentUser, db: DbSession):
     service = GamificationService(db)
     stats = await service.get_user_stats(current_user.id)
+    xp_to_next = (stats.level ** 2) * 100
+    
     result = UserStatsResponse(
-        xp=stats.xp,
         level=stats.level,
-        streak_days=stats.streak_days,
-        last_active_date=stats.last_active_date,
+        currentXP=stats.xp,
+        xpToNextLevel=xp_to_next,
+        currentStreak=stats.streak_days,
+        longestStreak=stats.streak_days, # Assuming we don't have longestStreak in DB, fallback to current
+        productivityScore=85, # Dummy value for now or calculate from tasks
+        badges=[], # Empty badges list
+        todayProgress=0, # Empty progress
     )
     return ApiResponse(data=result)
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../../../navigation/types';
@@ -77,7 +77,15 @@ export default function WorkingHoursScreen() {
           <View className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
             <Text className="text-sm text-gray-500 mb-1">Start Time</Text>
             <View className="flex-row items-center">
-              <Text className="text-xl font-bold text-dark dark:text-white flex-1">{startTime}</Text>
+              <TextInput 
+                className="text-xl font-bold text-dark dark:text-white flex-1"
+                value={startTime}
+                onChangeText={setStartTime}
+                placeholder="09:00"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+                placeholderTextColor="#94A3B8"
+              />
               <Ionicons name="time-outline" size={20} color="#94A3B8" />
             </View>
           </View>
@@ -87,7 +95,15 @@ export default function WorkingHoursScreen() {
           <View className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
             <Text className="text-sm text-gray-500 mb-1">End Time</Text>
             <View className="flex-row items-center">
-              <Text className="text-xl font-bold text-dark dark:text-white flex-1">{endTime}</Text>
+              <TextInput 
+                className="text-xl font-bold text-dark dark:text-white flex-1"
+                value={endTime}
+                onChangeText={setEndTime}
+                placeholder="17:00"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+                placeholderTextColor="#94A3B8"
+              />
               <Ionicons name="time-outline" size={20} color="#94A3B8" />
             </View>
           </View>

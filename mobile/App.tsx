@@ -9,11 +9,36 @@ import { QueryProvider } from './src/providers/QueryProvider';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { ToastContainer } from './src/components/common/ToastContainer';
 
+const linking = {
+  prefixes: ['planminds://', 'http://localhost:8082', 'http://localhost:8081'],
+  config: {
+    screens: {
+      Auth: {
+        screens: {
+          Welcome: 'welcome',
+          Login: 'login',
+          Register: 'signup',
+          ForgotPassword: 'forgot-password',
+        },
+      },
+      Main: {
+        screens: {
+          Home: 'home',
+          Assistant: 'assistant',
+          Schedule: 'schedule',
+          Insights: 'insights',
+          Profile: 'profile',
+        },
+      },
+    },
+  },
+};
+
 function AppContent() {
   const { isDark } = useTheme();
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer linking={linking}>
         <RootNavigator />
         <StatusBar style={isDark ? "light" : "dark"} />
         <ToastContainer />

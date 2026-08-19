@@ -46,15 +46,42 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     try {
       const { profile } = get();
       
+      const formatTime = (time?: string) => {
+        if (!time) return undefined;
+        // Strip everything except digits and colons
+        const clean = time.replace(/[^\d:]/g, '');
+        if (!clean) return '09:00'; // Default fallback if no numbers
+        
+        let h = '09', m = '00';
+        if (clean.includes(':')) {
+          const parts = clean.split(':');
+          h = parts[0].slice(0, 2).padStart(2, '0');
+          m = (parts[1] || '00').slice(0, 2).padEnd(2, '0');
+        } else {
+          if (clean.length <= 2) {
+            h = clean.padStart(2, '0');
+          } else {
+            h = clean.slice(0, 2).padStart(2, '0');
+            m = clean.slice(2, 4).padEnd(2, '0');
+          }
+        }
+        
+        // Ensure within valid ranges (00-23 and 00-59)
+        const hour = Math.min(Math.max(parseInt(h) || 0, 0), 23);
+        const minute = Math.min(Math.max(parseInt(m) || 0, 0), 59);
+        
+        return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      };
+
       // Map local frontend profile state to backend UserPreferencesUpdate schema
-      const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      const workingDays = profile.workingHours?.activeDays?.map((d: number) => dayNames[d - 1]) || [];
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const workingDays = profile.workingHours?.activeDays?.map((d: number) => dayNames[d]) || [];
 
       const backendPayload = {
-        wake_time: profile.sleepSchedule?.wakeUpTime,
-        sleep_time: profile.sleepSchedule?.bedtime,
-        work_start: profile.workingHours?.startTime,
-        work_end: profile.workingHours?.endTime,
+        wake_time: formatTime(profile.sleepSchedule?.wakeUpTime),
+        sleep_time: formatTime(profile.sleepSchedule?.bedtime),
+        work_start: formatTime(profile.workingHours?.startTime),
+        work_end: formatTime(profile.workingHours?.endTime),
         timezone: profile.timeZone,
         notification_preferences: profile.notificationPrefs,
         working_days: workingDays,

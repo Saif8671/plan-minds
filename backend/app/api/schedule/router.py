@@ -325,17 +325,21 @@ async def regenerate_schedule(
 
 
 @router.get(
-    "/today/current",
+    "/daily",
     response_model=ApiResponse[ScheduleResponse],
-    responses={404: {"description": "No schedule found for today"}},
-    summary="Get today's schedule",
+    responses={404: {"description": "No schedule found for the date"}},
+    summary="Get daily schedule",
 )
-async def get_today_schedule(current_user: CurrentUser, db: DbSession):
-    """Return the active schedule for today, if one exists."""
+async def get_daily_schedule(
+    date: date,
+    current_user: CurrentUser,
+    db: DbSession
+):
+    """Return the active schedule for the given date, if one exists."""
     engine = SchedulingEngine(db)
-    schedule = await engine.get_today(current_user.id)
+    schedule = await engine.get_schedule_for_date(current_user.id, date)
     if not schedule:
-        raise HTTPException(status_code=404, detail="No schedule found for today")
+        raise HTTPException(status_code=404, detail="No schedule found for the date")
     return ApiResponse(data=schedule)
 
 
