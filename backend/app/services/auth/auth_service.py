@@ -13,7 +13,7 @@ from app.core.security import (
     verify_password_reset_token,
     verify_token,
 )
-from app.models import User
+from app.models import User, RevokedToken
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
     FirebaseAuthRequest,
@@ -26,6 +26,7 @@ from app.schemas.auth import (
 
 class AuthService:
     def __init__(self, db: AsyncSession):
+        self.db = db
         self.user_repo = UserRepository(db)
 
     async def register(self, data: UserRegisterRequest) -> TokenResponse:
@@ -127,6 +128,12 @@ class AuthService:
         )
 
     async def get_current_user(self, token: str) -> User:
+        # Check if token is revoked
+        from sqlalchemy import select
+        revoked = await self.db.execute(select(RevokedToken).where(RevokedToken.token == token))
+        if revoked.scalar_one_or_none():
+            raise UnauthorizedError("Token has been revoked")
+            
         user_id = verify_token(token, expected_type="access")
         if not user_id:
             raise UnauthorizedError()
@@ -136,40 +143,101 @@ class AuthService:
             raise UnauthorizedError("User not found or inactive")
         return user
 
+    async def logout(self, token: str) -> None:
+        """Revoke the given access token by adding it to the blacklist."""
+        try:
+            revoked = RevokedToken(token=token)
+            self.db.add(revoked)
+            await self.db.commit()
+        except Exception as e:
+            await self.db.rollback()
+            import logging
+            logging.error(f"Failed to revoke token: {e}")
+
     # ─── Password reset flow ───────────────────────────────────────────
 
     async def forgot_password(self, email: str) -> ResetTokenResponse:
-        """Generate a password-reset token for the given email.
+        """Generate a password-reset OTP for the given email.
 
-        In dev mode the token is returned directly in the response.
-        In production you would send it via email instead.
+        In dev mode the OTP is logged to console.
+        In production you would send it via email.
         """
         user = await self.user_repo.get_by_email(email)
         if not user:
-            # Don't reveal whether the email exists — return a generic response
             return ResetTokenResponse(
                 reset_token="",
                 message="If an account with that email exists, a reset link has been sent.",
             )
-        token = create_password_reset_token(user.id)
+            
+        import random
+        from datetime import UTC, datetime, timedelta
+        from app.core.config import get_settings
+        from app.services.email_service import EmailService
+        
+        # 1-minute cooldown per email
+        if user.reset_otp_expires_at:
+            expires_at = user.reset_otp_expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            time_since_last_otp = (expires_at - timedelta(minutes=15))
+            if (datetime.now(UTC) - time_since_last_otp).total_seconds() < 60:
+                # Still in cooldown, just return success without sending
+                return ResetTokenResponse(
+                    reset_token="",
+                    message="If an account with that email exists, a reset link has been sent.",
+                )
+        
+        settings = get_settings()
+        otp = f"{random.randint(0, 999999):06d}"
+        
+        user.reset_otp = otp
+        user.reset_otp_expires_at = datetime.now(UTC) + timedelta(minutes=15)
+        await self.user_repo.update(user)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Password reset OTP for {email}: {otp}")
+        
+        await EmailService.send_email(
+            to_email=email,
+            subject="Your Password Reset Code",
+            body=f"Your password reset code is: {otp}. It expires in 15 minutes."
+        )
+        
+        # Security bypass ONLY in development
+        if settings.environment == "development":
+            return ResetTokenResponse(
+                reset_token=otp,
+                message="If an account with that email exists, a reset link has been sent.",
+            )
+            
         return ResetTokenResponse(
-            reset_token=token,
+            reset_token="",
             message="If an account with that email exists, a reset link has been sent.",
         )
 
     async def verify_otp(self, email: str, otp: str) -> ResetTokenResponse:
-        """Verify a reset token / OTP and issue a fresh reset token for the final step.
-
-        Currently the OTP *is* the JWT token. In production you would
-        verify a 6-digit code stored in cache/DB.
-        """
-        user_id = verify_password_reset_token(otp)
-        if not user_id:
+        """Verify a reset OTP and issue a fresh JWT reset token for the final step."""
+        user = await self.user_repo.get_by_email(email)
+        if not user or not user.is_active:
             raise UnauthorizedError("Invalid or expired OTP")
-
-        user = await self.user_repo.get_active_by_id(UUID(user_id))
-        if not user or user.email != email:
+            
+        from datetime import UTC, datetime
+        
+        if not user.reset_otp or user.reset_otp != otp:
             raise UnauthorizedError("Invalid or expired OTP")
+            
+        expires_at = user.reset_otp_expires_at
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+            
+        if not expires_at or expires_at < datetime.now(UTC):
+            raise UnauthorizedError("Invalid or expired OTP")
+            
+        # Clear the OTP
+        user.reset_otp = None
+        user.reset_otp_expires_at = None
+        await self.user_repo.update(user)
 
         # Issue a fresh short-lived token for the reset step
         fresh_token = create_password_reset_token(user.id)

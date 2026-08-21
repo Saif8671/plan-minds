@@ -144,6 +144,8 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    reset_otp: Mapped[str | None] = mapped_column(String(6))
+    reset_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     schedules: Mapped[list["Schedule"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -766,3 +768,17 @@ class ConversationState(Base):
     )
 
     conversation: Mapped["Conversation"] = relationship(back_populates="state")
+
+
+# ─── RevokedToken ──────────────────────────────────────────────────────
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    token: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

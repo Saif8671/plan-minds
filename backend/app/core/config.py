@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_email: str = "mailto:admin@example.com"
 
+    smtp_hostname: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = False
+    smtp_from_email: str = "noreply@example.com"
+
     groq_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("GROQ_API_KEY", "OPENAI_API_KEY"),

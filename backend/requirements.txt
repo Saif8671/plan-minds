@@ -31,6 +31,8 @@ httpx==0.28.1
 python-dateutil==2.9.0.post0
 cachetools==5.5.0
 python-json-logger==3.2.1
+aiosmtplib==3.0.1
+redis==5.2.1
 
 # Rate limiting
 slowapi==0.1.9
