@@ -7,23 +7,10 @@ import { ScreenLayout } from '../../../components/layouts/ScreenLayout';
 import { Button } from '../../../components/common/Button';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useFirebaseLogin } from '../../../hooks/useAuth';
-
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Welcome'>;
 
 export default function WelcomeScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { mutate: firebaseLogin, isPending } = useFirebaseLogin();
-
-  const handleGoogleLogin = () => {
-    // Pass ID Token obtained from Google / Firebase auth prompt
-    firebaseLogin('mock_google_id_token');
-  };
-
-  const handleAppleLogin = () => {
-    // Pass ID Token obtained from Apple / Firebase auth prompt
-    firebaseLogin('mock_apple_id_token');
-  };
 
   return (
     <ScreenLayout padding={false}>
@@ -50,31 +37,6 @@ export default function WelcomeScreen() {
             variant="outline"
             onPress={() => navigation.navigate('Login')}
           />
-        </View>
-
-        <View className="w-full mt-10">
-          <View className="flex-row items-center mb-6">
-            <View className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-            <Text className="mx-4 text-sm text-gray-400 font-medium">OR CONTINUE WITH</Text>
-            <View className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-          </View>
-
-          <View className="flex-row gap-x-4">
-            <Button
-              className="flex-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-              textClassName="text-dark dark:text-white"
-              title="Google"
-              leftIcon={<Ionicons name="logo-google" size={20} color="#DB4437" />}
-              onPress={handleGoogleLogin}
-            />
-            <Button
-              className="flex-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-              textClassName="text-dark dark:text-white"
-              title="Apple"
-              leftIcon={<Ionicons name="logo-apple" size={20} color="#000" className="dark:color-white" />}
-              onPress={handleAppleLogin}
-            />
-          </View>
         </View>
       </View>
     </ScreenLayout>

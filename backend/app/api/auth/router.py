@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.deps import DbSession, _bearer
+from app.api.deps import DbSession, _bearer, CurrentUser
 from app.schemas.auth import (
     FirebaseAuthRequest,
     ForgotPasswordRequest,
@@ -47,6 +47,7 @@ async def firebase_login(request: Request, data: FirebaseAuthRequest, db: DbSess
 @router.post("/logout", response_model=ApiResponse[MessageData])
 async def logout(
     db: DbSession,
+    user: CurrentUser,
     credentials: HTTPAuthorizationCredentials = Depends(_bearer)
 ):
     if credentials and credentials.credentials:

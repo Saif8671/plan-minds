@@ -128,11 +128,29 @@ class AuthService:
         )
 
     async def get_current_user(self, token: str) -> User:
-        # Check if token is revoked
-        from sqlalchemy import select
-        revoked = await self.db.execute(select(RevokedToken).where(RevokedToken.token == token))
-        if revoked.scalar_one_or_none():
-            raise UnauthorizedError("Token has been revoked")
+        # Extract JTI from token to check revocation
+        from app.core.security import decode_token
+        from app.core.redis import get_redis
+        from jose import JWTError
+        try:
+            payload = decode_token(token)
+            jti = payload.get("jti")
+            iat = payload.get("iat")
+            sub = payload.get("sub")
+            if jti and sub and iat:
+                redis = await get_redis()
+                if redis:
+                    is_revoked = await redis.exists(f"revoked_jti:{jti}")
+                    if is_revoked:
+                        raise UnauthorizedError("Token has been revoked")
+                        
+                    revoked_all_at_str = await redis.get(f"user_revoked_all:{sub}")
+                    if revoked_all_at_str:
+                        revoked_all_at = float(revoked_all_at_str)
+                        if iat < revoked_all_at:
+                            raise UnauthorizedError("All tokens have been revoked for this user")
+        except JWTError:
+            pass # Let verify_token handle validation errors
             
         user_id = verify_token(token, expected_type="access")
         if not user_id:
@@ -144,15 +162,29 @@ class AuthService:
         return user
 
     async def logout(self, token: str) -> None:
-        """Revoke the given access token by adding it to the blacklist."""
+        """Revoke the given access token by adding its JTI to Redis."""
+        from app.core.security import decode_token
+        from app.core.redis import get_redis
+        from jose import JWTError
+        from datetime import UTC, datetime
+        import logging
+
         try:
-            revoked = RevokedToken(token=token)
-            self.db.add(revoked)
-            await self.db.commit()
+            payload = decode_token(token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                redis = await get_redis()
+                if redis:
+                    # Calculate remaining TTL
+                    now = datetime.now(UTC).timestamp()
+                    ttl = int(exp - now)
+                    if ttl > 0:
+                        await redis.setex(f"revoked_jti:{jti}", ttl, "1")
+        except JWTError as e:
+            logging.error(f"Failed to revoke token, invalid token: {e}")
         except Exception as e:
-            await self.db.rollback()
-            import logging
-            logging.error(f"Failed to revoke token: {e}")
+            logging.error(f"Failed to revoke token in Redis: {e}")
 
     # ─── Password reset flow ───────────────────────────────────────────
 
@@ -245,6 +277,9 @@ class AuthService:
 
     async def reset_password(self, token: str, new_password: str) -> None:
         """Consume a valid reset token and set a new password."""
+        from app.core.redis import get_redis
+        from datetime import UTC, datetime
+        
         user_id = verify_password_reset_token(token)
         if not user_id:
             raise UnauthorizedError("Invalid or expired reset token")
@@ -255,3 +290,9 @@ class AuthService:
 
         user.hashed_password = hash_password(new_password)
         await self.user_repo.update(user)
+        
+        redis = await get_redis()
+        if redis:
+            now = datetime.now(UTC).timestamp()
+            # Set with a long TTL (e.g. 7 days = max refresh token expiry)
+            await redis.setex(f"user_revoked_all:{user_id}", 7 * 24 * 60 * 60, str(now))
