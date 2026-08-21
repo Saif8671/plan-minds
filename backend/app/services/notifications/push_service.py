@@ -2,7 +2,13 @@ import json
 import logging
 from uuid import UUID
 
-from pywebpush import WebPushException, webpush
+from exponent_server_sdk import (
+    DeviceNotRegisteredError,
+    PushClient,
+    PushMessage,
+    PushServerError,
+    PushTicketError,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,37 +24,31 @@ class PushService:
         self.db = db
 
     async def subscribe(
-        self, user_id: UUID, endpoint: str, p256dh: str, auth: str
+        self, user_id: UUID, push_token: str
     ) -> PushSubscription:
         # Check if exists
         result = await self.db.execute(
             select(PushSubscription).where(
                 PushSubscription.user_id == user_id,
-                PushSubscription.endpoint == endpoint,
+                PushSubscription.push_token == push_token,
             )
         )
         sub = result.scalars().first()
-        if sub:
-            sub.p256dh = p256dh
-            sub.auth = auth
-        else:
+        if not sub:
             sub = PushSubscription(
                 user_id=user_id,
-                endpoint=endpoint,
-                p256dh=p256dh,
-                auth=auth,
+                push_token=push_token,
             )
             self.db.add(sub)
-
-        await self.db.flush()
-        await self.db.refresh(sub)
+            await self.db.flush()
+            await self.db.refresh(sub)
         return sub
 
-    async def unsubscribe(self, user_id: UUID, endpoint: str) -> None:
+    async def unsubscribe(self, user_id: UUID, push_token: str) -> None:
         result = await self.db.execute(
             select(PushSubscription).where(
                 PushSubscription.user_id == user_id,
-                PushSubscription.endpoint == endpoint,
+                PushSubscription.push_token == push_token,
             )
         )
         sub = result.scalars().first()
@@ -67,31 +67,22 @@ class PushService:
         if not subscriptions:
             return
 
-        payload = json.dumps({"title": title, "body": body, "data": data or {}})
-
-        vapid_key = settings.vapid_private_key
-        if not vapid_key:
-            logger.debug("VAPID_PRIVATE_KEY is not set. Skipping web push.")
-            return
-
-        vapid_claims = {"sub": settings.vapid_email}
-
         for sub in subscriptions:
-            subscription_info = {
-                "endpoint": sub.endpoint,
-                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-            }
             try:
-                webpush(
-                    subscription_info=subscription_info,
-                    data=payload,
-                    vapid_private_key=vapid_key,
-                    vapid_claims=vapid_claims,
+                response = PushClient().publish(
+                    PushMessage(
+                        to=sub.push_token,
+                        title=title,
+                        body=body,
+                        data=data or {},
+                    )
                 )
-            except WebPushException as ex:
-                logger.error("Web push failed: %s", ex)
-                # Remove invalid subscriptions (HTTP 410 Gone)
-                if ex.response and ex.response.status_code == 410:
-                    await self.unsubscribe(user_id, sub.endpoint)
-            except Exception as e:
-                logger.error("Failed to send push: %s", e)
+            except PushServerError as exc:
+                logger.error(f"Expo server error for token {sub.push_token}: {exc}")
+            except (PushTicketError, DeviceNotRegisteredError) as exc:
+                logger.warning(
+                    f"Invalid Expo push token {sub.push_token}, unsubscribing: {exc}"
+                )
+                await self.unsubscribe(user_id, sub.push_token)
+            except Exception as exc:
+                logger.error(f"Failed to send Expo push to {sub.push_token}: {exc}")

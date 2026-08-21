@@ -47,4 +47,10 @@ export const NotificationsAPI = {
   deleteNotification: async (notificationId: string): Promise<void> => {
     await apiClient.delete(`${ENDPOINTS.NOTIFICATIONS.BASE}/${notificationId}`);
   },
+
+  subscribePush: async (pushToken: string): Promise<void> => {
+    await apiClient.post(`${ENDPOINTS.NOTIFICATIONS.BASE}/push/subscribe`, {
+      push_token: pushToken
+    });
+  },
 };

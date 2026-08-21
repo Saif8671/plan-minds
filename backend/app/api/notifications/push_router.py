@@ -16,18 +16,16 @@ async def subscribe(
     service = PushService(db)
     sub = await service.subscribe(
         user_id=current_user.id,
-        endpoint=data.endpoint,
-        p256dh=data.p256dh,
-        auth=data.auth,
+        push_token=data.push_token,
     )
     return sub
 
 
 @router.delete("/unsubscribe", status_code=204)
 async def unsubscribe(
-    endpoint: str,
+    push_token: str,
     current_user: CurrentUser,
     db: DbSession,
 ):
     service = PushService(db)
-    await service.unsubscribe(current_user.id, endpoint)
+    await service.unsubscribe(current_user.id, push_token)

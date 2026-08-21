@@ -25,9 +25,7 @@ class NotificationMarkReadRequest(BaseModel):
 
 
 class PushSubscriptionCreate(BaseModel):
-    endpoint: str
-    p256dh: str
-    auth: str
+    push_token: str
 
 
 class PushSubscriptionResponse(BaseModel):
@@ -35,5 +33,5 @@ class PushSubscriptionResponse(BaseModel):
 
     id: UUID
     user_id: UUID
-    endpoint: str
+    push_token: str
     created_at: datetime

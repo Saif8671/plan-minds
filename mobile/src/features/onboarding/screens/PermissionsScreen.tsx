@@ -23,6 +23,19 @@ export default function PermissionsScreen() {
       setIsRequesting(true);
       const { status } = await Notifications.requestPermissionsAsync();
       setNotificationsEnabled(status === 'granted');
+      
+      if (status === 'granted') {
+        try {
+          const tokenData = await Notifications.getExpoPushTokenAsync();
+          if (tokenData && tokenData.data) {
+            const { NotificationsAPI } = require('../../../api/notifications.api');
+            await NotificationsAPI.subscribePush(tokenData.data);
+          }
+        } catch (error) {
+          console.error("Failed to get or send push token", error);
+        }
+      }
+      
       setIsRequesting(false);
     } else {
       setNotificationsEnabled(false);
