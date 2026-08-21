@@ -138,17 +138,25 @@ class AuthService:
             iat = payload.get("iat")
             sub = payload.get("sub")
             if jti and sub and iat:
-                redis = await get_redis()
-                if redis:
-                    is_revoked = await redis.exists(f"revoked_jti:{jti}")
-                    if is_revoked:
-                        raise UnauthorizedError("Token has been revoked")
-                        
-                    revoked_all_at_str = await redis.get(f"user_revoked_all:{sub}")
-                    if revoked_all_at_str:
-                        revoked_all_at = float(revoked_all_at_str)
-                        if iat < revoked_all_at:
-                            raise UnauthorizedError("All tokens have been revoked for this user")
+                try:
+                    redis = await get_redis()
+                    if redis:
+                        is_revoked = await redis.exists(f"revoked_jti:{jti}")
+                        if is_revoked:
+                            raise UnauthorizedError("Token has been revoked")
+                            
+                        revoked_all_at_str = await redis.get(f"user_revoked_all:{sub}")
+                        if revoked_all_at_str:
+                            revoked_all_at = float(revoked_all_at_str)
+                            if iat < revoked_all_at:
+                                raise UnauthorizedError("All tokens have been revoked for this user")
+                except UnauthorizedError:
+                    raise
+                except Exception as e:
+                    import logging
+                    # Fail open on availability: if Redis is unreachable, allow the request through.
+                    # Failing closed here would mean Redis being down takes down all authenticated traffic.
+                    logging.getLogger(__name__).warning(f"Redis unavailable, failing open for revocation check: {e}")
         except JWTError:
             pass # Let verify_token handle validation errors
             
@@ -184,6 +192,8 @@ class AuthService:
         except JWTError as e:
             logging.error(f"Failed to revoke token, invalid token: {e}")
         except Exception as e:
+            # Log failure but still return success for primary action (client-side logout)
+            # Failing the whole request is worse UX for a non-critical-path failure.
             logging.error(f"Failed to revoke token in Redis: {e}")
 
     # ─── Password reset flow ───────────────────────────────────────────
@@ -291,8 +301,14 @@ class AuthService:
         user.hashed_password = hash_password(new_password)
         await self.user_repo.update(user)
         
-        redis = await get_redis()
-        if redis:
-            now = datetime.now(UTC).timestamp()
-            # Set with a long TTL (e.g. 7 days = max refresh token expiry)
-            await redis.setex(f"user_revoked_all:{user_id}", 7 * 24 * 60 * 60, str(now))
+        try:
+            redis = await get_redis()
+            if redis:
+                now = datetime.now(UTC).timestamp()
+                # Set with a long TTL (e.g. 7 days = max refresh token expiry)
+                await redis.setex(f"user_revoked_all:{user_id}", 7 * 24 * 60 * 60, str(now))
+        except Exception as e:
+            import logging
+            # Log failure but still return success for primary action (password changed)
+            # Failing the whole request is worse UX for a non-critical-path failure.
+            logging.getLogger(__name__).warning(f"Redis unavailable, could not revoke all tokens after password reset: {e}")

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     app_name: str = "AI Schedule Organizer"
     app_version: str = "1.0.0"
-    environment: str = "development"
+    environment: str = "production"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
 

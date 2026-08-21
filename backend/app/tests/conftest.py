@@ -94,3 +94,18 @@ async def authenticated_client(async_client):
     # Inject auth header
     async_client.headers["Authorization"] = f"Bearer {tokens['data']['access_token']}"
     yield async_client
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_redis():
+    """Tear down and recreate the Redis client per test to avoid event loop issues."""
+    import app.core.redis as redis_core
+    await redis_core.close_redis()
+    redis_core.redis_client = None
+    
+    await redis_core.init_redis()
+    yield
+    
+    await redis_core.close_redis()
+    redis_core.redis_client = None
+
