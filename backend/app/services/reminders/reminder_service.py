@@ -52,7 +52,7 @@ class ReminderService:
     ) -> ReminderResponse:
         reminder = Reminder(
             user_id=user_id,
-            task_id=data.task_id,
+            task_occurrence_id=data.task_id,
             title=data.title,
             reminder_type=data.reminder_type,
             reminder_time=data.reminder_time,
@@ -67,7 +67,7 @@ class ReminderService:
         """Create a recurring reminder and pre-compute its next fire time."""
         reminder = Reminder(
             user_id=user_id,
-            task_id=data.task_id,
+            task_occurrence_id=data.task_id,
             title=data.title,
             reminder_type=data.reminder_type,
             reminder_time=data.reminder_time,

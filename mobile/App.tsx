@@ -1,6 +1,6 @@
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -8,8 +8,9 @@ import { ThemeProvider, useTheme } from './src/providers/ThemeProvider';
 import { QueryProvider } from './src/providers/QueryProvider';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { ToastContainer } from './src/components/common/ToastContainer';
+import { RootStackParamList } from './src/navigation/types';
 
-const linking = {
+const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['planminds://', 'http://localhost:8082', 'http://localhost:8081'],
   config: {
     screens: {

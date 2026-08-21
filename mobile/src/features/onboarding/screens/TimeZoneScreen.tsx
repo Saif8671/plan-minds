@@ -32,7 +32,7 @@ type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, 'TimeZ
 
 export default function TimeZoneScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const profile = useOnboardingStore((state) => state.storeProfile || state.profile); // ensure store works
+  const profile = useOnboardingStore((state) => state.profile);
   const updateProfile = useOnboardingStore((state) => state.updateProfile);
 
   const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
