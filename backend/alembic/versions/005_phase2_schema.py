@@ -17,11 +17,23 @@ depends_on = None
 
 def upgrade() -> None:
     # ── 1. Create Enums ─────────────────────────────────────────────
-    sa.Enum('work', 'study', 'health', 'personal', 'social', 'other', name='routinecategory').create(op.get_bind(), checkfirst=True)
-    sa.Enum('low', 'medium', 'high', 'urgent', name='taskpriority').create(op.get_bind(), checkfirst=True)
-    sa.Enum('daily', 'weekly', 'monthly', 'custom', name='recurrencetype').create(op.get_bind(), checkfirst=True)
-    sa.Enum('active', 'archived', name='conversationstatus').create(op.get_bind(), checkfirst=True)
-    sa.Enum('strict', 'flexible', name='schedulingstyle').create(op.get_bind(), checkfirst=True)
+    routinecategory = sa.Enum('work', 'study', 'health', 'personal', 'social', 'other', name='routinecategory')
+    routinecategory.create(op.get_bind(), checkfirst=True)
+
+    taskpriority = sa.Enum('low', 'medium', 'high', 'urgent', name='taskpriority')
+    taskpriority.create(op.get_bind(), checkfirst=True)
+
+    recurrencetype = sa.Enum('daily', 'weekly', 'monthly', 'custom', name='recurrencetype')
+    recurrencetype.create(op.get_bind(), checkfirst=True)
+
+    conversationstatus = sa.Enum('active', 'archived', name='conversationstatus')
+    conversationstatus.create(op.get_bind(), checkfirst=True)
+
+    schedulingstyle = sa.Enum('strict', 'flexible', name='schedulingstyle')
+    schedulingstyle.create(op.get_bind(), checkfirst=True)
+
+    reminderoutcome = sa.Enum('sent', 'snoozed', 'dismissed', 'missed', name='reminderoutcome')
+    reminderoutcome.create(op.get_bind(), checkfirst=True)
 
     # ── 2. push_subscriptions ───────────────────────────────────────
     op.create_table('push_subscriptions',
@@ -163,4 +175,54 @@ def upgrade() -> None:
     op.create_index('ix_notifications_user_read', 'notifications', ['user_id', 'is_read'])
 
 def downgrade() -> None:
-    pass
+    # Drop Indexes
+    op.drop_index('ix_notifications_user_read', table_name='notifications')
+    op.drop_index('ix_schedules_user_date', table_name='schedules')
+    op.drop_index('ix_tasks_user_status', table_name='tasks')
+    op.drop_index('ix_activity_logs_user', table_name='activity_logs')
+    op.drop_index('ix_activity_logs_task_created', table_name='activity_logs')
+    op.drop_index('ix_reminders_user_sent', table_name='reminders')
+    op.drop_index('ix_reminders_fire_time', table_name='reminders')
+    op.drop_index('ix_reminders_next_fire', table_name='reminders')
+
+    # Drop Foreign Keys
+    op.drop_constraint('fk_activity_logs_user_id', 'activity_logs', type_='foreignkey')
+
+    # Drop Columns
+    op.drop_column('activity_logs', 'skipped_reason')
+    op.drop_column('activity_logs', 'delay_minutes')
+    op.drop_column('activity_logs', 'user_id')
+
+    op.drop_column('reminders', 'next_fire')
+    op.drop_column('reminders', 'recurrence_rule')
+    op.drop_column('reminders', 'recurrence')
+
+    op.drop_column('tasks', 'labels')
+    op.drop_column('tasks', 'notes')
+
+    op.drop_column('routines', 'tags')
+    op.drop_column('routines', 'preferred_time')
+    op.drop_column('routines', 'estimated_duration')
+    op.drop_column('routines', 'frequency')
+    op.drop_column('routines', 'priority')
+    op.drop_column('routines', 'category')
+    op.drop_column('routines', 'description')
+
+    op.drop_column('reminders', 'is_completed')
+    op.drop_column('reminders', 'snooze_until')
+    op.drop_column('reminders', 'is_snoozed')
+    op.drop_column('notifications', 'is_delivered')
+
+    # Drop Tables
+    op.drop_table('reminder_history')
+    op.drop_table('habit_profiles')
+    op.drop_table('conversation_states')
+    op.drop_table('conversation_messages')
+    op.drop_table('conversations')
+    op.drop_table('user_preferences')
+    op.drop_table('push_subscriptions')
+
+    # Drop Enums specific to this migration
+    sa.Enum(name='reminderoutcome').drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name='schedulingstyle').drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name='conversationstatus').drop(op.get_bind(), checkfirst=True)

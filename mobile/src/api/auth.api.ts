@@ -1,5 +1,7 @@
 import { apiClient } from './client';
 import { ENDPOINTS } from './endpoints';
+import { StorageService } from '../services/storage.service';
+import { useAuthStore } from '../store/authStore';
 
 export interface LoginRequest {
   email: string;
@@ -40,16 +42,26 @@ export const AuthAPI = {
     return response.data;
   },
 
-  forgotPassword: async (email: string): Promise<void> => {
-    await apiClient.post('/auth/forgot-password', { email });
+  forgotPassword: async (email: string): Promise<{ reset_token: string; message: string }> => {
+    const response = await apiClient.post(ENDPOINTS.AUTH.FORGOT_PASSWORD, { email });
+    return response.data?.data || response.data;
   },
 
-  verifyOTP: async (email: string, otp: string): Promise<{ reset_token?: string }> => {
-    const response = await apiClient.post('/auth/verify-otp', { email, otp });
+  verifyOTP: async (email: string, otp: string): Promise<{ reset_token: string }> => {
+    const response = await apiClient.post(ENDPOINTS.AUTH.VERIFY_OTP, { email, otp });
     return response.data?.data || response.data || { reset_token: otp };
   },
 
   resetPassword: async (token: string, password: string): Promise<void> => {
-    await apiClient.post('/auth/reset-password', { token, password });
+    await apiClient.post(ENDPOINTS.AUTH.RESET_PASSWORD, { token, password });
+  },
+
+  logout: async (): Promise<void> => {
+    try {
+      await apiClient.post(ENDPOINTS.AUTH.LOGOUT);
+    } finally {
+      await StorageService.clearTokens();
+      useAuthStore.getState().logout();
+    }
   },
 };

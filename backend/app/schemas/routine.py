@@ -10,7 +10,6 @@ from app.models import RecurrenceType, RoutineCategory, TaskPriority
 class RoutineCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    routine_text: str = Field(min_length=1, max_length=5000)
     category: RoutineCategory = RoutineCategory.OTHER
     priority: TaskPriority = TaskPriority.MEDIUM
     frequency: RecurrenceType | None = None
@@ -22,7 +21,6 @@ class RoutineCreate(BaseModel):
 class RoutineUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
-    routine_text: str | None = Field(default=None, min_length=1, max_length=5000)
     category: RoutineCategory | None = None
     priority: TaskPriority | None = None
     frequency: RecurrenceType | None = None
@@ -39,7 +37,6 @@ class RoutineResponse(BaseModel):
     user_id: UUID
     title: str
     description: str | None = None
-    routine_text: str
     category: RoutineCategory
     priority: TaskPriority
     frequency: RecurrenceType | None = None

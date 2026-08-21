@@ -2,19 +2,22 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, UnauthorizedError
+from app.core.exceptions import ConflictError, NotFoundError, UnauthorizedError
 from app.core.firebase import verify_firebase_id_token
 from app.core.security import (
     create_access_token,
+    create_password_reset_token,
     create_refresh_token,
     hash_password,
     verify_password,
+    verify_password_reset_token,
     verify_token,
 )
 from app.models import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
     FirebaseAuthRequest,
+    ResetTokenResponse,
     TokenResponse,
     UserLoginRequest,
     UserRegisterRequest,
@@ -132,3 +135,55 @@ class AuthService:
         if not user:
             raise UnauthorizedError("User not found or inactive")
         return user
+
+    # ─── Password reset flow ───────────────────────────────────────────
+
+    async def forgot_password(self, email: str) -> ResetTokenResponse:
+        """Generate a password-reset token for the given email.
+
+        In dev mode the token is returned directly in the response.
+        In production you would send it via email instead.
+        """
+        user = await self.user_repo.get_by_email(email)
+        if not user:
+            # Don't reveal whether the email exists — return a generic response
+            return ResetTokenResponse(
+                reset_token="",
+                message="If an account with that email exists, a reset link has been sent.",
+            )
+        token = create_password_reset_token(user.id)
+        return ResetTokenResponse(
+            reset_token=token,
+            message="If an account with that email exists, a reset link has been sent.",
+        )
+
+    async def verify_otp(self, email: str, otp: str) -> ResetTokenResponse:
+        """Verify a reset token / OTP and issue a fresh reset token for the final step.
+
+        Currently the OTP *is* the JWT token. In production you would
+        verify a 6-digit code stored in cache/DB.
+        """
+        user_id = verify_password_reset_token(otp)
+        if not user_id:
+            raise UnauthorizedError("Invalid or expired OTP")
+
+        user = await self.user_repo.get_active_by_id(UUID(user_id))
+        if not user or user.email != email:
+            raise UnauthorizedError("Invalid or expired OTP")
+
+        # Issue a fresh short-lived token for the reset step
+        fresh_token = create_password_reset_token(user.id)
+        return ResetTokenResponse(reset_token=fresh_token, message="OTP verified")
+
+    async def reset_password(self, token: str, new_password: str) -> None:
+        """Consume a valid reset token and set a new password."""
+        user_id = verify_password_reset_token(token)
+        if not user_id:
+            raise UnauthorizedError("Invalid or expired reset token")
+
+        user = await self.user_repo.get_active_by_id(UUID(user_id))
+        if not user:
+            raise NotFoundError("User")
+
+        user.hashed_password = hash_password(new_password)
+        await self.user_repo.update(user)

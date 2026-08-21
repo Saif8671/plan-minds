@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { ENDPOINTS } from './endpoints';
 
 export interface AnalyticsData {
   focusHours: number;
@@ -22,41 +23,75 @@ export interface AnalyticsData {
   }[];
 }
 
+export interface PeriodAnalytics {
+  period: string;
+  start_date: string;
+  end_date: string;
+  completion_rate: number;
+  focus_hours: number;
+  study_hours: number;
+  missed_tasks: number;
+  consistency_score: number;
+  daily_breakdown: { day: string; focus: number; tasks: number }[];
+  insights: string[] | null;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Work: '#1677FF',
+  Health: '#10B981',
+  Learning: '#7A3EF3',
+  Personal: '#F59E0B',
+  Study: '#6366F1',
+  Exercise: '#EC4899',
+  Other: '#94A3B8',
+};
+
+/** Transform the backend PeriodAnalytics shape into the frontend AnalyticsData shape */
+function transformPeriodToAnalyticsData(raw: PeriodAnalytics): AnalyticsData {
+  const dailyStats = (raw.daily_breakdown || []).map((d: any) => ({
+    day: d.day || d.date || '',
+    focus: d.focus_hours ?? d.focus ?? 0,
+    tasks: d.completed_tasks ?? d.tasks ?? 0,
+  }));
+
+  const totalTasks = dailyStats.reduce((sum, d) => sum + d.tasks, 0);
+  const totalFocus = dailyStats.reduce((sum, d) => sum + d.focus, 0);
+
+  return {
+    focusHours: raw.focus_hours || totalFocus,
+    totalTasksCompleted: totalTasks,
+    weeklyProductivityScore: Math.round(raw.consistency_score || 0),
+    dailyStats,
+    topCategories: [], // Backend PeriodAnalytics doesn't include category breakdown
+    insights: (raw.insights || []).map((text, i) => ({
+      id: String(i + 1),
+      title: text.split('.')[0] || 'Insight',
+      description: text,
+      type: 'info' as const,
+    })),
+  };
+}
+
 export const AnalyticsAPI = {
+  /** Get weekly analytics (replaces the old hardcoded mock) */
   getAnalytics: async (): Promise<AnalyticsData> => {
-    return new Promise((resolve) => setTimeout(() => resolve({
-      focusHours: 24.5,
-      totalTasksCompleted: 42,
-      weeklyProductivityScore: 85,
-      dailyStats: [
-        { day: 'Mon', focus: 3, tasks: 5 },
-        { day: 'Tue', focus: 4, tasks: 7 },
-        { day: 'Wed', focus: 2.5, tasks: 4 },
-        { day: 'Thu', focus: 5, tasks: 8 },
-        { day: 'Fri', focus: 3.5, tasks: 6 },
-        { day: 'Sat', focus: 1, tasks: 2 },
-        { day: 'Sun', focus: 0, tasks: 0 },
-      ],
-      topCategories: [
-        { name: 'Work', value: 60, color: '#1677FF' },
-        { name: 'Health', value: 20, color: '#10B981' },
-        { name: 'Learning', value: 15, color: '#7A3EF3' },
-        { name: 'Personal', value: 5, color: '#F59E0B' },
-      ],
-      insights: [
-        {
-          id: '1',
-          title: 'Peak Productivity',
-          description: 'You get the most deep work done between 9 AM and 11 AM.',
-          type: 'positive'
-        },
-        {
-          id: '2',
-          title: 'Sleep Correlation',
-          description: 'When you sleep less than 6 hours, your completed tasks drop by 30%.',
-          type: 'warning'
-        }
-      ]
-    }), 800));
-  }
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.WEEKLY);
+    const raw: PeriodAnalytics = response.data?.data || response.data;
+    return transformPeriodToAnalyticsData(raw);
+  },
+
+  getWeeklyAnalytics: async (): Promise<PeriodAnalytics> => {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.WEEKLY);
+    return response.data?.data || response.data;
+  },
+
+  getMonthlyAnalytics: async (): Promise<PeriodAnalytics> => {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.MONTHLY);
+    return response.data?.data || response.data;
+  },
+
+  getWeeklyReport: async (): Promise<string> => {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.WEEKLY_REPORT);
+    return response.data;
+  },
 };

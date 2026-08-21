@@ -1,6 +1,8 @@
 import { apiClient } from './client';
 import { ENDPOINTS } from './endpoints';
 
+// ─── Types ────────────────────────────────────────────────────────────
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -15,6 +17,32 @@ export interface ChatResponse {
   suggested_actions?: string[];
   actions_taken?: string[];
 }
+
+export interface ParsedRoutine {
+  events: any[];
+  tasks: any[];
+}
+
+export interface AIAnalyzeResponse {
+  tasks: any[];
+  summary?: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title?: string;
+  created_at: string;
+  last_message_at?: string;
+}
+
+export interface AISuggestion {
+  type: string;
+  message: string;
+  confidence?: number;
+  data?: Record<string, any>;
+}
+
+// ─── API Client ───────────────────────────────────────────────────────
 
 export const ChatAPI = {
   sendMessage: async (message: string, conversationId?: string): Promise<ChatMessage> => {
@@ -39,10 +67,52 @@ export const ChatAPI = {
       throw error;
     }
   },
-  
+
+  // ── Conversations ─────────────────────────────────────────────────
+
+  listConversations: async (limit: number = 20): Promise<ConversationSummary[]> => {
+    const response = await apiClient.get(ENDPOINTS.AI.CHAT_CONVERSATIONS, {
+      params: { limit },
+    });
+    const data = response.data?.data;
+    return data?.conversations || [];
+  },
+
+  newConversation: async (title?: string): Promise<{ conversation_id: string }> => {
+    const params: Record<string, any> = {};
+    if (title) params.title = title;
+    const response = await apiClient.post(ENDPOINTS.AI.CHAT_NEW, null, { params });
+    return response.data?.data || response.data;
+  },
+
+  /** @deprecated Use listConversations instead */
   getHistory: async (): Promise<ChatMessage[]> => {
-    // Currently, backend does not have an endpoint to fetch messages in a conversation.
-    // Return empty array and let the UI handle the "no history" state.
     return [];
-  }
+  },
+
+  // ── Routine Parsing & Analysis ────────────────────────────────────
+
+  parseRoutine: async (text: string): Promise<ParsedRoutine> => {
+    const response = await apiClient.post(ENDPOINTS.AI.PARSE_ROUTINE, { text });
+    return response.data?.data || response.data;
+  },
+
+  analyzeRoutine: async (
+    routine_text: string,
+    auto_persist: boolean = false,
+  ): Promise<AIAnalyzeResponse> => {
+    const response = await apiClient.post(ENDPOINTS.AI.ANALYZE, {
+      routine_text,
+      auto_persist,
+    });
+    return response.data?.data || response.data;
+  },
+
+  // ── Suggestions ───────────────────────────────────────────────────
+
+  getSuggestions: async (): Promise<AISuggestion[]> => {
+    const response = await apiClient.get(ENDPOINTS.AI.SUGGESTIONS);
+    const data = response.data?.data;
+    return data?.suggestions || [];
+  },
 };

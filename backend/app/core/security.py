@@ -51,3 +51,13 @@ def verify_token(token: str, expected_type: str = "access") -> str | None:
         return payload.get("sub")
     except JWTError:
         return None
+
+
+def create_password_reset_token(subject: str | UUID) -> str:
+    expire = datetime.now(UTC) + timedelta(minutes=15)
+    payload = {"sub": str(subject), "exp": expire, "type": "password_reset"}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def verify_password_reset_token(token: str) -> str | None:
+    return verify_token(token, expected_type="password_reset")

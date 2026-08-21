@@ -593,7 +593,6 @@ class Routine(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    routine_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[RoutineCategory] = mapped_column(
         Enum(RoutineCategory, values_callable=lambda x: [e.value for e in x]),
         default=RoutineCategory.OTHER,

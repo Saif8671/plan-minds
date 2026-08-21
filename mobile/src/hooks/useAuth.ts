@@ -92,3 +92,15 @@ export function useFirebaseLogin() {
     },
   });
 }
+
+export function useLogout() {
+  return useMutation({
+    mutationFn: () => AuthAPI.logout(),
+    onSuccess: () => {
+      toast.success('Logged out', 'You have been signed out.');
+    },
+    onError: (error) => {
+      ErrorHandler.handle(error, 'Failed to logout.');
+    },
+  });
+}

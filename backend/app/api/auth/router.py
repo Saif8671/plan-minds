@@ -3,10 +3,14 @@ from fastapi import APIRouter, Request
 from app.api.deps import DbSession
 from app.schemas.auth import (
     FirebaseAuthRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     TokenRefreshRequest,
     TokenResponse,
     UserLoginRequest,
     UserRegisterRequest,
+    VerifyOTPRequest,
+    ResetTokenResponse,
 )
 from app.schemas.base import ApiResponse, MessageData
 from app.services.auth.auth_service import AuthService
@@ -50,3 +54,27 @@ async def refresh_token(request: Request, data: TokenRefreshRequest, db: DbSessi
     service = AuthService(db)
     result = await service.refresh(data.refresh_token)
     return ApiResponse(data=result)
+
+
+@router.post("/forgot-password", response_model=ApiResponse[ResetTokenResponse])
+@limiter.limit("5/minute")
+async def forgot_password(request: Request, data: ForgotPasswordRequest, db: DbSession):
+    service = AuthService(db)
+    result = await service.forgot_password(data.email)
+    return ApiResponse(data=result)
+
+
+@router.post("/verify-otp", response_model=ApiResponse[ResetTokenResponse])
+@limiter.limit("10/minute")
+async def verify_otp(request: Request, data: VerifyOTPRequest, db: DbSession):
+    service = AuthService(db)
+    result = await service.verify_otp(data.email, data.otp)
+    return ApiResponse(data=result)
+
+
+@router.post("/reset-password", response_model=ApiResponse[MessageData])
+@limiter.limit("5/minute")
+async def reset_password(request: Request, data: ResetPasswordRequest, db: DbSession):
+    service = AuthService(db)
+    await service.reset_password(data.token, data.password)
+    return ApiResponse(data=MessageData(message="Password has been reset successfully"))

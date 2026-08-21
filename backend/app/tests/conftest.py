@@ -12,14 +12,15 @@ from app.core.database import Base, get_db
 from app.core.config import get_settings
 from main import app
 
-@compiles(JSONB, 'sqlite')
+
+@compiles(JSONB, "sqlite")
 def compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"
 
 
 settings = get_settings()
 
-# Use an in-memory SQLite database for testing
+# Keep tests self-contained and independent of a locally configured PostgreSQL server.
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
