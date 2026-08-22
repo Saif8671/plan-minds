@@ -17,7 +17,8 @@ export function useLogin() {
         const profile = await ProfileAPI.getProfile();
         setUser({ id: profile.id, email: profile.email, name: profile.name });
       } catch (err) {
-        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+        await StorageService.clearTokens();
+        throw new Error('Failed to fetch user profile after login.');
       }
       toast.success('Welcome back!', 'Successfully logged in.');
     },
@@ -38,7 +39,8 @@ export function useRegister() {
         const profile = await ProfileAPI.getProfile();
         setUser({ id: profile.id, email: profile.email, name: profile.name });
       } catch (err) {
-        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+        await StorageService.clearTokens();
+        throw new Error('Failed to fetch user profile after registration.');
       }
       toast.success('Account created', 'Welcome to PlanMinds!');
     },
@@ -83,7 +85,8 @@ export function useFirebaseLogin() {
         const profile = await ProfileAPI.getProfile();
         setUser({ id: profile.id, email: profile.email, name: profile.name });
       } catch (err) {
-        setUser({ id: 'unknown', email: 'unknown', name: 'User' });
+        await StorageService.clearTokens();
+        throw new Error('Failed to fetch user profile after Firebase login.');
       }
       toast.success('Welcome!', 'Successfully authenticated.');
     },

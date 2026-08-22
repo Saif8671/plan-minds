@@ -1,11 +1,11 @@
 from uuid import UUID
 
+from cachetools import TTLCache
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import UserPreferences
 from app.repositories.base import BaseRepository
-from cachetools import TTLCache
 
 _prefs_cache = TTLCache(maxsize=100, ttl=300)
 
@@ -18,7 +18,7 @@ class PreferencesRepository(BaseRepository[UserPreferences]):
         cache_key = f"prefs_{user_id}"
         if cache_key in _prefs_cache:
             return _prefs_cache[cache_key]
-            
+
         result = await self.db.execute(
             select(UserPreferences).where(UserPreferences.user_id == user_id)
         )

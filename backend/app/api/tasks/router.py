@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import TaskStatus
-from app.schemas.base import ApiResponse, PaginatedData, MessageData
+from app.schemas.base import ApiResponse, MessageData, PaginatedData
 from app.schemas.task import (
     TaskActivityCreate,
     TaskCreate,
@@ -31,7 +31,10 @@ _common_responses = {
     "",
     response_model=ApiResponse[TaskResponse],
     status_code=201,
-    responses={401: {"description": "Not authenticated"}, 422: {"description": "Validation error"}},
+    responses={
+        401: {"description": "Not authenticated"},
+        422: {"description": "Validation error"},
+    },
     summary="Create a task",
 )
 async def create_task(data: TaskCreate, current_user: CurrentUser, db: DbSession):
@@ -62,7 +65,9 @@ async def list_tasks(
     service = TaskService(db)
     skip = (page - 1) * page_size
     tasks, total = await service.get_tasks(current_user.id, skip, page_size, status)
-    return ApiResponse(data=PaginatedData(items=tasks, total=total, page=page, page_size=page_size))
+    return ApiResponse(
+        data=PaginatedData(items=tasks, total=total, page=page, page_size=page_size)
+    )
 
 
 @router.get(

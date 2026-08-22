@@ -1,7 +1,6 @@
 """Integration tests — task lifecycle (create → list → start → complete → verify XP)."""
 
 import pytest
-import pytest_asyncio
 
 
 @pytest.mark.asyncio
@@ -49,7 +48,9 @@ async def test_task_lifecycle_start_complete(authenticated_client):
     assert start_resp.json()["data"]["status"] == "in_progress"
 
     # Complete
-    complete_resp = await authenticated_client.patch(f"/api/v1/tasks/{task_id}/complete")
+    complete_resp = await authenticated_client.patch(
+        f"/api/v1/tasks/{task_id}/complete"
+    )
     assert complete_resp.status_code == 200
     assert complete_resp.json()["data"]["status"] == "completed"
     assert complete_resp.json()["data"]["completed"] is True
@@ -107,7 +108,9 @@ async def test_delete_task(authenticated_client):
 @pytest.mark.asyncio
 async def test_filter_tasks_by_status(authenticated_client):
     # Create one completed task
-    cr = await authenticated_client.post("/api/v1/tasks", json={"title": "Done", "duration": 30})
+    cr = await authenticated_client.post(
+        "/api/v1/tasks", json={"title": "Done", "duration": 30}
+    )
     task_id = cr.json()["data"]["id"]
     await authenticated_client.patch(f"/api/v1/tasks/{task_id}/complete")
 

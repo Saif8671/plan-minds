@@ -1,5 +1,4 @@
 from datetime import date, datetime, time, timedelta
-from typing import List
 
 from app.models import Task, UserPreferences
 from app.schemas.schedule import ScheduleBlock
@@ -20,13 +19,15 @@ DEFAULT_MEALS = [
 
 
 class ScheduleContext:
-    def __init__(self, target_date: date, wake: time, sleep: time, prefs: UserPreferences | None):
+    def __init__(
+        self, target_date: date, wake: time, sleep: time, prefs: UserPreferences | None
+    ):
         self.target_date = target_date
         self.wake = wake
         self.sleep = sleep
         self.prefs = prefs
-        self.blocks: List[ScheduleBlock] = []
-        self.unscheduled: List[str] = []
+        self.blocks: list[ScheduleBlock] = []
+        self.unscheduled: list[str] = []
 
     def has_conflict(self, start: time, end: time) -> bool:
         for block in self.blocks:
@@ -41,12 +42,12 @@ class ScheduleContext:
 
 
 class PipelineComponent:
-    def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
+    def process(self, context: ScheduleContext, tasks: list[Task]) -> None:
         raise NotImplementedError
 
 
 class MealScheduler(PipelineComponent):
-    def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
+    def process(self, context: ScheduleContext, tasks: list[Task]) -> None:
         for meal in DEFAULT_MEALS:
             if context.time_in_range(meal["start"]):
                 context.blocks.append(
@@ -61,7 +62,7 @@ class MealScheduler(PipelineComponent):
 
 
 class WorkCollegeScheduler(PipelineComponent):
-    def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
+    def process(self, context: ScheduleContext, tasks: list[Task]) -> None:
         prefs = context.prefs
         if not prefs:
             return
@@ -88,23 +89,33 @@ class WorkCollegeScheduler(PipelineComponent):
 
 
 class FixedTaskScheduler(PipelineComponent):
-    def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
-        fixed_tasks = [t for t in tasks if t.is_fixed and t.fixed_start and t.fixed_end and not t.is_recurring]
-        
+    def process(self, context: ScheduleContext, tasks: list[Task]) -> None:
+        fixed_tasks = [
+            t
+            for t in tasks
+            if t.is_fixed and t.fixed_start and t.fixed_end and not t.is_recurring
+        ]
+
         # Also include recurring tasks that are fixed time and occur today
-        recurring_fixed = [t for t in tasks if t.is_fixed and t.is_recurring and t.fixed_start and t.fixed_end]
+        recurring_fixed = [
+            t
+            for t in tasks
+            if t.is_fixed and t.is_recurring and t.fixed_start and t.fixed_end
+        ]
         for rt in recurring_fixed:
-            occurrences = RecurrenceExpander.expand_task_for_date(rt, context.target_date)
+            occurrences = RecurrenceExpander.expand_task_for_date(
+                rt, context.target_date
+            )
             if occurrences:
                 fixed_tasks.append(rt)
 
         for task in sorted(fixed_tasks, key=lambda t: t.fixed_start):  # type: ignore
-            if not context.has_conflict(task.fixed_start, task.fixed_end): # type: ignore
+            if not context.has_conflict(task.fixed_start, task.fixed_end):  # type: ignore
                 context.blocks.append(
                     ScheduleBlock(
                         title=task.title,
-                        start=task.fixed_start, # type: ignore
-                        end=task.fixed_end, # type: ignore
+                        start=task.fixed_start,  # type: ignore
+                        end=task.fixed_end,  # type: ignore
                         task_id=task.id,
                         category=task.category.value,
                         is_fixed=True,
@@ -126,19 +137,21 @@ class ScoredTaskScheduler(PipelineComponent):
     """
 
     ENERGY_MAP = {  # hour_of_day → energy score (0-20)
-        **{h: 18 for h in range(6, 10)},    # Early morning: high
-        **{h: 15 for h in range(10, 12)},   # Late morning: good
-        **{h: 8  for h in range(12, 14)},   # Post-lunch dip
-        **{h: 14 for h in range(14, 18)},   # Afternoon: decent
-        **{h: 12 for h in range(18, 21)},   # Evening: moderate
-        **{h: 5  for h in range(21, 24)},   # Night: low
+        **{h: 18 for h in range(6, 10)},  # Early morning: high
+        **{h: 15 for h in range(10, 12)},  # Late morning: good
+        **{h: 8 for h in range(12, 14)},  # Post-lunch dip
+        **{h: 14 for h in range(14, 18)},  # Afternoon: decent
+        **{h: 12 for h in range(18, 21)},  # Evening: moderate
+        **{h: 5 for h in range(21, 24)},  # Night: low
     }
 
-    def process(self, context: ScheduleContext, tasks: List[Task]) -> None:
+    def process(self, context: ScheduleContext, tasks: list[Task]) -> None:
         flexible_tasks = [t for t in tasks if not t.is_fixed and not t.is_recurring]
         recurring_flex = [t for t in tasks if not t.is_fixed and t.is_recurring]
         for rt in recurring_flex:
-            occurrences = RecurrenceExpander.expand_task_for_date(rt, context.target_date)
+            occurrences = RecurrenceExpander.expand_task_for_date(
+                rt, context.target_date
+            )
             if occurrences:
                 flexible_tasks.append(rt)
 
@@ -149,8 +162,11 @@ class ScoredTaskScheduler(PipelineComponent):
 
         total_available = (day_end - day_start).total_seconds() / 60
         scheduled_minutes = sum(
-            (datetime.combine(context.target_date, b.end) -
-             datetime.combine(context.target_date, b.start)).total_seconds() / 60
+            (
+                datetime.combine(context.target_date, b.end)
+                - datetime.combine(context.target_date, b.start)
+            ).total_seconds()
+            / 60
             for b in context.blocks
         )
         load_ratio = scheduled_minutes / max(total_available, 1)
@@ -160,8 +176,10 @@ class ScoredTaskScheduler(PipelineComponent):
             flexible_tasks,
             key=lambda t: (
                 PRIORITY_ORDER.get(
-                    t.priority.value if hasattr(t.priority, "value")
-                    else str(t.priority).lower(), 99
+                    t.priority.value
+                    if hasattr(t.priority, "value")
+                    else str(t.priority).lower(),
+                    99,
                 ),
                 t.deadline or datetime.max,
             ),
@@ -184,7 +202,9 @@ class ScoredTaskScheduler(PipelineComponent):
                 start_t = (candidate + travel).time()
                 end_t = (candidate + travel + duration).time()
 
-                if not context.time_in_range(start_t) or context.has_conflict(start_t, end_t):
+                if not context.time_in_range(start_t) or context.has_conflict(
+                    start_t, end_t
+                ):
                     candidate += timedelta(minutes=15)
                     continue
 
@@ -214,8 +234,12 @@ class ScoredTaskScheduler(PipelineComponent):
                 if work_minutes >= 90 and break_duration > 0:
                     break_cursor = datetime.combine(context.target_date, placed_end)
                     break_start = break_cursor.time()
-                    break_end = (break_cursor + timedelta(minutes=break_duration)).time()
-                    if context.time_in_range(break_start) and not context.has_conflict(break_start, break_end):
+                    break_end = (
+                        break_cursor + timedelta(minutes=break_duration)
+                    ).time()
+                    if context.time_in_range(break_start) and not context.has_conflict(
+                        break_start, break_end
+                    ):
                         context.blocks.append(
                             ScheduleBlock(
                                 title="Break",
@@ -238,7 +262,11 @@ class ScoredTaskScheduler(PipelineComponent):
 
         # 1. Priority score
         priority_scores = {"urgent": 40.0, "high": 30.0, "medium": 20.0, "low": 10.0}
-        pval = task.priority.value if hasattr(task.priority, "value") else str(task.priority).lower()
+        pval = (
+            task.priority.value
+            if hasattr(task.priority, "value")
+            else str(task.priority).lower()
+        )
         score += priority_scores.get(pval, 10.0)
 
         # 2. Deadline urgency (0–30 points)
@@ -258,10 +286,17 @@ class ScoredTaskScheduler(PipelineComponent):
         # 4. Preferred time bonus (0–15)
         if habit_profile:
             from app.models import TaskCategory
-            if task.category == TaskCategory.STUDY and habit_profile.preferred_study_hour is not None:
+
+            if (
+                task.category == TaskCategory.STUDY
+                and habit_profile.preferred_study_hour is not None
+            ):
                 diff = abs(hour - habit_profile.preferred_study_hour)
                 score += max(0, 15 - diff * 3)
-            elif task.category == TaskCategory.HEALTH and habit_profile.preferred_workout_hour is not None:
+            elif (
+                task.category == TaskCategory.HEALTH
+                and habit_profile.preferred_workout_hour is not None
+            ):
                 diff = abs(hour - habit_profile.preferred_workout_hour)
                 score += max(0, 15 - diff * 3)
 

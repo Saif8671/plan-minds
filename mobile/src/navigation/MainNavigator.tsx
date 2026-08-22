@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import HomeScreen from '../features/home/screens/HomeScreen';
 import AssistantScreen from '../features/assistant/screens/AssistantScreen';
-import ScheduleScreen from '../features/schedule/screens/ScheduleScreen';
+import ScheduleNavigator from './ScheduleNavigator';
 import InsightsScreen from '../features/analytics/screens/InsightsScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
 import { useTheme } from '../providers/ThemeProvider';
@@ -38,7 +38,7 @@ export default function MainNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Schedule" component={ScheduleScreen} />
+      <Tab.Screen name="Schedule" component={ScheduleNavigator} />
       <Tab.Screen name="Assistant" component={AssistantScreen} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />

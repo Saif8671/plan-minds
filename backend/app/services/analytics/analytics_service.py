@@ -1,47 +1,56 @@
 from datetime import date, timedelta
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from app.models import TaskCategory, TaskStatus
-from app.repositories.activity_repository import ActivityLogRepository
-from app.repositories.task_repository import TaskRepository
-from app.repositories.user_repository import UserRepository
+from app.models import TaskCategory, TaskOccurrence, TaskStatus, User
 from app.schemas.analytics import CategoryBreakdown, DashboardAnalytics, PeriodAnalytics
-from app.services.ai.suggestion_service import AISuggestionService
 
 
 class AnalyticsService:
     def __init__(self, db: AsyncSession):
-        self.task_repo = TaskRepository(db)
-        self.activity_repo = ActivityLogRepository(db)
-        self.user_repo = UserRepository(db)
-        self.suggestion_service = AISuggestionService()
+        self.db = db
 
     async def get_dashboard(self, user_id: UUID) -> DashboardAnalytics:
-        tasks = await self.task_repo.get_by_user(user_id, limit=1000)
-        total = len(tasks)
-        completed = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
-        missed = sum(1 for t in tasks if t.status == TaskStatus.SKIPPED)
+        thirty_days_ago = date.today() - timedelta(days=30)
+        stmt = (
+            select(TaskOccurrence)
+            .join(TaskOccurrence.task)
+            .where(
+                TaskOccurrence.user_id == user_id,
+                TaskOccurrence.date >= thirty_days_ago,
+            )
+            .options(joinedload(TaskOccurrence.task))
+        )
+
+        result = await self.db.execute(stmt)
+        occurrences = result.scalars().all()
+
+        total = len(occurrences)
+        completed = sum(1 for o in occurrences if o.status == TaskStatus.COMPLETED)
+        missed = sum(1 for o in occurrences if o.status == TaskStatus.SKIPPED)
         completion_rate = (completed / total * 100) if total else 0.0
 
         study_minutes = sum(
-            t.duration
-            for t in tasks
-            if t.category == TaskCategory.STUDY and t.status == TaskStatus.COMPLETED
+            o.duration
+            for o in occurrences
+            if o.task.category == TaskCategory.STUDY
+            and o.status == TaskStatus.COMPLETED
         )
         focus_minutes = sum(
-            t.duration for t in tasks if t.status == TaskStatus.COMPLETED
+            o.duration for o in occurrences if o.status == TaskStatus.COMPLETED
         )
 
-        category_map: dict[str, dict] = {}
-        for task in tasks:
-            if task.status != TaskStatus.COMPLETED:
+        category_map = {}
+        for o in occurrences:
+            if o.status != TaskStatus.COMPLETED:
                 continue
-            cat = task.category.value
+            cat = o.task.category.value
             if cat not in category_map:
                 category_map[cat] = {"hours": 0.0, "count": 0}
-            category_map[cat]["hours"] += task.duration / 60
+            category_map[cat]["hours"] += o.duration / 60
             category_map[cat]["count"] += 1
 
         breakdown = [
@@ -49,7 +58,10 @@ class AnalyticsService:
             for k, v in category_map.items()
         ]
 
-        user = await self.user_repo.get_by_id(user_id)
+        user_stmt = select(User).where(User.id == user_id)
+        user_result = await self.db.execute(user_stmt)
+        user = user_result.scalar_one_or_none()
+
         avg_sleep = None
         if user and user.wake_time and user.sleep_time:
             wake_mins = user.wake_time.hour * 60 + user.wake_time.minute
@@ -62,7 +74,6 @@ class AnalyticsService:
         consistency = min(
             100.0, completion_rate * 0.7 + (100 - (missed / max(total, 1) * 100)) * 0.3
         )
-        suggestions = self.suggestion_service.generate_suggestions(tasks)
 
         return DashboardAnalytics(
             completion_rate=round(completion_rate, 1),
@@ -87,37 +98,51 @@ class AnalyticsService:
     ) -> PeriodAnalytics:
         end = date.today()
         start = end - timedelta(days=days - 1)
-        tasks = await self.task_repo.get_by_user(user_id, limit=5000)
 
-        total = len(tasks)
-        completed = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
-        missed = sum(1 for t in tasks if t.status == TaskStatus.SKIPPED)
+        stmt = (
+            select(TaskOccurrence)
+            .join(TaskOccurrence.task)
+            .where(
+                TaskOccurrence.user_id == user_id,
+                TaskOccurrence.date >= start,
+                TaskOccurrence.date <= end,
+            )
+            .options(joinedload(TaskOccurrence.task))
+        )
+
+        result = await self.db.execute(stmt)
+        occurrences = result.scalars().all()
+
+        total = len(occurrences)
+        completed = sum(1 for o in occurrences if o.status == TaskStatus.COMPLETED)
+        missed = sum(1 for o in occurrences if o.status == TaskStatus.SKIPPED)
         completion_rate = (completed / total * 100) if total else 0.0
 
         focus_minutes = sum(
-            t.duration for t in tasks if t.status == TaskStatus.COMPLETED
+            o.duration for o in occurrences if o.status == TaskStatus.COMPLETED
         )
         study_minutes = sum(
-            t.duration
-            for t in tasks
-            if t.category == TaskCategory.STUDY and t.status == TaskStatus.COMPLETED
+            o.duration
+            for o in occurrences
+            if o.task.category == TaskCategory.STUDY
+            and o.status == TaskStatus.COMPLETED
         )
 
         daily_breakdown = []
         for i in range(days):
             day = start + timedelta(days=i)
-            day_tasks = [t for t in tasks if t.created_at.date() == day]
+            day_occurrences = [o for o in occurrences if o.date == day]
             day_completed = sum(
-                1 for t in day_tasks if t.status == TaskStatus.COMPLETED
+                1 for o in day_occurrences if o.status == TaskStatus.COMPLETED
             )
             daily_breakdown.append(
                 {
                     "date": day.isoformat(),
-                    "total": len(day_tasks),
+                    "total": len(day_occurrences),
                     "completed": day_completed,
                     "rate": (
-                        round(day_completed / len(day_tasks) * 100, 1)
-                        if day_tasks
+                        round(day_completed / len(day_occurrences) * 100, 1)
+                        if day_occurrences
                         else 0
                     ),
                 }
@@ -176,31 +201,33 @@ class AnalyticsService:
 
     async def generate_weekly_report_markdown(self, user_id: UUID) -> str:
         weekly = await self.get_weekly(user_id)
-        
+
         lines = [
-            f"# Weekly Performance Report",
+            "# Weekly Performance Report",
             f"**Date Range:** {weekly.start_date} to {weekly.end_date}",
-            f"---",
-            f"## Summary",
+            "---",
+            "## Summary",
             f"- **Completion Rate:** {weekly.completion_rate}%",
             f"- **Focus Hours:** {weekly.focus_hours}h",
             f"- **Study Hours:** {weekly.study_hours}h",
             f"- **Missed Tasks:** {weekly.missed_tasks}",
             f"- **Consistency Score:** {weekly.consistency_score}/100",
-            f"",
-            f"## Daily Breakdown",
+            "",
+            "## Daily Breakdown",
         ]
-        
+
         for day in weekly.daily_breakdown:
-            lines.append(f"- **{day['date']}:** {day['completed']}/{day['total']} tasks ({day['rate']}%)")
-            
+            lines.append(
+                f"- **{day['date']}:** {day['completed']}/{day['total']} tasks ({day['rate']}%)"
+            )
+
         lines.append("")
         lines.append("## Insights & Recommendations")
-        
+
         if weekly.insights:
             for insight in weekly.insights:
                 lines.append(f"- {insight}")
         else:
             lines.append("- Keep up the good work!")
-            
+
         return "\n".join(lines)

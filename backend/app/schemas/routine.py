@@ -16,6 +16,9 @@ class RoutineCreate(BaseModel):
     estimated_duration: int = Field(default=60, ge=1, le=1440)
     preferred_time: time | None = None
     tags: list[str] | None = None
+    days_of_week: list[int] | None = None
+    start_time: time | None = None
+    end_time: time | None = None
 
 
 class RoutineUpdate(BaseModel):
@@ -27,6 +30,9 @@ class RoutineUpdate(BaseModel):
     estimated_duration: int | None = Field(default=None, ge=1, le=1440)
     preferred_time: time | None = None
     tags: list[str] | None = None
+    days_of_week: list[int] | None = None
+    start_time: time | None = None
+    end_time: time | None = None
     is_active: bool | None = None
 
 
@@ -43,6 +49,9 @@ class RoutineResponse(BaseModel):
     estimated_duration: int
     preferred_time: time | None = None
     tags: list[str] | None = None
+    days_of_week: list[int] | None = None
+    start_time: time | None = None
+    end_time: time | None = None
     parsed_data: dict[str, Any] | None = None
     is_active: bool
     created_at: datetime

@@ -24,6 +24,8 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+let refreshTokenPromise: Promise<string | null> | null = null;
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -39,24 +41,39 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
-        const refreshToken = await StorageService.getRefreshToken();
-        if (!refreshToken) throw new Error('No refresh token');
+        if (!refreshTokenPromise) {
+          refreshTokenPromise = (async () => {
+            try {
+              const refreshToken = await StorageService.getRefreshToken();
+              if (!refreshToken) throw new Error('No refresh token');
 
-        // Request new token
-        const response = await axios.post(`${apiUrl}${ENDPOINTS.AUTH.REFRESH}`, {
-          refresh_token: refreshToken,
-        });
+              // Request new token
+              const response = await axios.post(`${apiUrl}${ENDPOINTS.AUTH.REFRESH}`, {
+                refresh_token: refreshToken,
+              });
 
-        const { access_token, refresh_token: new_refresh } = response.data.data;
-        await StorageService.setTokens(access_token, new_refresh);
+              const { access_token, refresh_token: new_refresh } = response.data.data;
+              await StorageService.setTokens(access_token, new_refresh);
+              return access_token;
+            } catch (err) {
+              await StorageService.clearTokens();
+              useAuthStore.getState().logout();
+              throw err;
+            } finally {
+              refreshTokenPromise = null;
+            }
+          })();
+        }
+
+        const access_token = await refreshTokenPromise;
+        if (!access_token) {
+           return Promise.reject(error);
+        }
 
         // Retry original request
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        return axios(originalRequest);
+        return apiClient(originalRequest);
       } catch (refreshError) {
-        // Refresh token expired or invalid, force logout
-        await StorageService.clearTokens();
-        useAuthStore.getState().logout();
         return Promise.reject(refreshError);
       }
     }

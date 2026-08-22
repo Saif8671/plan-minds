@@ -21,12 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError
 from app.core.logger import get_logger
 from app.models import (
     Conversation,
     ConversationMessage,
-    ConversationState,
     ConversationStatus,
     Task,
     TaskStatus,
@@ -57,13 +55,42 @@ TOOLS = [
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Task title"},
-                    "duration": {"type": "integer", "description": "Duration in minutes"},
-                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
-                    "category": {"type": "string", "enum": ["work", "study", "health", "personal", "meal", "sleep", "other"]},
-                    "deadline": {"type": "string", "description": "ISO datetime deadline, e.g. 2026-08-10T17:00:00"},
-                    "is_fixed": {"type": "boolean", "description": "Whether the task has a fixed time"},
-                    "fixed_start": {"type": "string", "description": "HH:MM format start time"},
-                    "fixed_end": {"type": "string", "description": "HH:MM format end time"},
+                    "duration": {
+                        "type": "integer",
+                        "description": "Duration in minutes",
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "urgent"],
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "work",
+                            "study",
+                            "health",
+                            "personal",
+                            "meal",
+                            "sleep",
+                            "other",
+                        ],
+                    },
+                    "deadline": {
+                        "type": "string",
+                        "description": "ISO datetime deadline, e.g. 2026-08-10T17:00:00",
+                    },
+                    "is_fixed": {
+                        "type": "boolean",
+                        "description": "Whether the task has a fixed time",
+                    },
+                    "fixed_start": {
+                        "type": "string",
+                        "description": "HH:MM format start time",
+                    },
+                    "fixed_end": {
+                        "type": "string",
+                        "description": "HH:MM format end time",
+                    },
                 },
                 "required": ["title"],
             },
@@ -80,7 +107,10 @@ TOOLS = [
                     "task_id": {"type": "string", "description": "Task UUID"},
                     "title": {"type": "string"},
                     "duration": {"type": "integer"},
-                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "urgent"],
+                    },
                     "deadline": {"type": "string", "description": "ISO datetime"},
                 },
                 "required": ["task_id"],
@@ -133,7 +163,10 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "duration_minutes": {"type": "integer", "description": "Required free time in minutes"}
+                    "duration_minutes": {
+                        "type": "integer",
+                        "description": "Required free time in minutes",
+                    }
                 },
                 "required": ["duration_minutes"],
             },
@@ -192,10 +225,10 @@ class AISchedulerAgent:
 
         return f"""You are PlanMinds, a smart productivity assistant. Help the user manage their tasks and schedule.
 
-Today: {now.strftime('%A, %Y-%m-%d')}
-Current time: {now.strftime('%H:%M')} UTC
+Today: {now.strftime("%A, %Y-%m-%d")}
+Current time: {now.strftime("%H:%M")} UTC
 User timezone: {tz}
-Pending tasks ({pending_count}): {task_summary or 'none'}
+Pending tasks ({pending_count}): {task_summary or "none"}
 
 Guidelines:
 - Be concise and action-oriented
@@ -233,7 +266,10 @@ Guidelines:
         tasks = await self.task_repo.get_by_user(user.id, limit=200)
 
         # Inject rich system prompt
-        messages[0] = {"role": "system", "content": self._build_system_prompt(user, tasks)}
+        messages[0] = {
+            "role": "system",
+            "content": self._build_system_prompt(user, tasks),
+        }
 
         # Tool execution loop
         actions_taken: list[str] = []
@@ -258,7 +294,9 @@ Guidelines:
                 self.db.add(assistant_msg)
                 conversation.updated_at = datetime.now(UTC)
                 await self.db.flush()
-                return ChatResponse(reply=reply, actions_taken=actions_taken if actions_taken else None)
+                return ChatResponse(
+                    reply=reply, actions_taken=actions_taken if actions_taken else None
+                )
 
             msg = response.choices[0].message
 
@@ -273,10 +311,18 @@ Guidelines:
                 self.db.add(assistant_msg)
                 conversation.updated_at = datetime.now(UTC)
                 await self.db.flush()
-                return ChatResponse(reply=reply, actions_taken=actions_taken if actions_taken else None)
+                return ChatResponse(
+                    reply=reply, actions_taken=actions_taken if actions_taken else None
+                )
 
             # Process tool calls
-            messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+                }
+            )
             for tool_call in msg.tool_calls:
                 result = await self._execute_tool(
                     tool_call.function.name,
@@ -285,13 +331,17 @@ Guidelines:
                     tasks,
                     actions_taken,
                 )
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result),
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps(result),
+                    }
+                )
 
-        return ChatResponse(reply="I've processed your request.", actions_taken=actions_taken)
+        return ChatResponse(
+            reply="I've processed your request.", actions_taken=actions_taken
+        )
 
     async def _execute_tool(
         self,
@@ -335,7 +385,9 @@ Guidelines:
     # ─── Tool implementations ─────────────────────────────────────────
 
     async def _exec_get_tasks(self, user_id: UUID) -> dict:
-        tasks = await self.task_repo.get_by_user(user_id, limit=50, status=TaskStatus.PENDING)
+        tasks = await self.task_repo.get_by_user(
+            user_id, limit=50, status=TaskStatus.PENDING
+        )
         return {
             "tasks": [
                 {
@@ -352,8 +404,9 @@ Guidelines:
     async def _exec_create_task(
         self, user_id: UUID, args: dict, actions_taken: list[str]
     ) -> dict:
-        from app.models import Task, TaskCategory, TaskPriority
         from datetime import time
+
+        from app.models import Task, TaskCategory, TaskPriority
 
         task = Task(
             user_id=user_id,
@@ -371,8 +424,8 @@ Guidelines:
 
         if args.get("is_fixed") and args.get("fixed_start") and args.get("fixed_end"):
             for time_str in (args.get("fixed_start"), args.get("fixed_end")):
-                pass # just a placeholder for loop syntax
-            
+                pass  # just a placeholder for loop syntax
+
             def parse_time(ts: str):
                 ts = ts.strip().upper()
                 try:
@@ -380,6 +433,7 @@ Guidelines:
                 except ValueError:
                     try:
                         from datetime import datetime
+
                         return datetime.strptime(ts, "%I:%M %p").time()
                     except ValueError:
                         return None
@@ -472,13 +526,19 @@ Guidelines:
         task.fixed_start = new_start
         task.fixed_end = new_end
         await self.task_repo.update(task)
-        actions_taken.append(f"Rescheduled '{task.title}' to {args['new_start']}–{args['new_end']}")
-        return {"status": "rescheduled", "new_start": str(new_start), "new_end": str(new_end)}
+        actions_taken.append(
+            f"Rescheduled '{task.title}' to {args['new_start']}–{args['new_end']}"
+        )
+        return {
+            "status": "rescheduled",
+            "new_start": str(new_start),
+            "new_end": str(new_end),
+        }
 
     async def _exec_reschedule_day(self, user, actions_taken: list[str]) -> dict:
         try:
-            from app.services.scheduling.engine import SchedulingEngine
             from app.schemas.schedule import ScheduleRegenerateRequest
+            from app.services.scheduling.engine import SchedulingEngine
 
             engine = SchedulingEngine(self.db)
             await engine.regenerate(user, ScheduleRegenerateRequest())
@@ -494,12 +554,19 @@ Guidelines:
 
         # Get today's schedule
         result = await self.db.execute(
-            select(__import__("app.models", fromlist=["Schedule"]).Schedule).where(
-                __import__("app.models", fromlist=["Schedule"]).Schedule.user_id == user_id,
-                __import__("app.models", fromlist=["Schedule"]).Schedule.date == date.today(),
-            ).order_by(
-                __import__("app.models", fromlist=["Schedule"]).Schedule.created_at.desc()
-            ).limit(1)
+            select(__import__("app.models", fromlist=["Schedule"]).Schedule)
+            .where(
+                __import__("app.models", fromlist=["Schedule"]).Schedule.user_id
+                == user_id,
+                __import__("app.models", fromlist=["Schedule"]).Schedule.date
+                == date.today(),
+            )
+            .order_by(
+                __import__(
+                    "app.models", fromlist=["Schedule"]
+                ).Schedule.created_at.desc()
+            )
+            .limit(1)
         )
         schedule = result.scalar_one_or_none()
         if not schedule or not schedule.generated_schedule:
@@ -519,15 +586,20 @@ Guidelines:
                 continue
 
             gap_minutes = (
-                datetime.combine(date.today(), block_start) -
-                datetime.combine(date.today(), cursor)
+                datetime.combine(date.today(), block_start)
+                - datetime.combine(date.today(), cursor)
             ).total_seconds() / 60
 
             if gap_minutes >= duration:
                 return {
                     "free_slot": {
                         "start": cursor.strftime("%H:%M"),
-                        "end": (datetime.combine(date.today(), cursor) + __import__("datetime").timedelta(minutes=duration)).time().strftime("%H:%M"),
+                        "end": (
+                            datetime.combine(date.today(), cursor)
+                            + __import__("datetime").timedelta(minutes=duration)
+                        )
+                        .time()
+                        .strftime("%H:%M"),
                         "duration_minutes": duration,
                     }
                 }
@@ -536,14 +608,19 @@ Guidelines:
         # Check after last block
         end_of_day = time(22, 0)
         remaining = (
-            datetime.combine(date.today(), end_of_day) -
-            datetime.combine(date.today(), cursor)
+            datetime.combine(date.today(), end_of_day)
+            - datetime.combine(date.today(), cursor)
         ).total_seconds() / 60
         if remaining >= duration:
             return {
                 "free_slot": {
                     "start": cursor.strftime("%H:%M"),
-                    "end": (datetime.combine(date.today(), cursor) + __import__("datetime").timedelta(minutes=duration)).time().strftime("%H:%M"),
+                    "end": (
+                        datetime.combine(date.today(), cursor)
+                        + __import__("datetime").timedelta(minutes=duration)
+                    )
+                    .time()
+                    .strftime("%H:%M"),
                     "duration_minutes": duration,
                 }
             }
@@ -557,12 +634,19 @@ Guidelines:
 
         tasks = await self.task_repo.get_by_user(user_id, limit=500)
         matched = [
-            t for t in tasks
-            if query in t.title.lower() or (t.description and query in t.description.lower())
+            t
+            for t in tasks
+            if query in t.title.lower()
+            or (t.description and query in t.description.lower())
         ]
         return {
             "tasks": [
-                {"id": str(t.id), "title": t.title, "status": t.status.value, "priority": t.priority.value}
+                {
+                    "id": str(t.id),
+                    "title": t.title,
+                    "status": t.status.value,
+                    "priority": t.priority.value,
+                }
                 for t in matched[:10]
             ],
             "total_found": len(matched),
@@ -571,7 +655,7 @@ Guidelines:
     async def _exec_move_task_to_date(
         self, user_id: UUID, args: dict, actions_taken: list[str]
     ) -> dict:
-        from datetime import date, time
+        from datetime import date
 
         task_id_str = args.get("task_id", "")
         target_date_str = args.get("target_date", "")
@@ -589,13 +673,19 @@ Guidelines:
         if task.deadline:
             task.deadline = datetime.combine(target_date, task.deadline.timetz())
         elif task.fixed_start:
-            task.fixed_start = task.fixed_start  # Keep the time, date changes via deadline
+            task.fixed_start = (
+                task.fixed_start
+            )  # Keep the time, date changes via deadline
             # For fixed tasks, set a new deadline
             task.deadline = datetime.combine(target_date, task.fixed_start)
 
         await self.task_repo.update(task)
         actions_taken.append(f"Moved '{task.title}' to {target_date_str}")
-        return {"status": "moved", "task_id": str(task.id), "target_date": target_date_str}
+        return {
+            "status": "moved",
+            "task_id": str(task.id),
+            "target_date": target_date_str,
+        }
 
     # ─── Conversation management ──────────────────────────────────────
 
@@ -654,7 +744,9 @@ Guidelines:
         if len(db_messages) > _MAX_HISTORY:
             db_messages = db_messages[-_MAX_HISTORY:]
 
-        messages = [{"role": "system", "content": ""}]  # Placeholder — replaced before API call
+        messages = [
+            {"role": "system", "content": ""}
+        ]  # Placeholder — replaced before API call
         for msg in db_messages:
             messages.append({"role": msg.role, "content": msg.content})
 
@@ -680,11 +772,14 @@ Guidelines:
             for c in convs
         ]
 
-    async def create_new_conversation(self, user_id: UUID, title: str | None = None) -> dict:
+    async def create_new_conversation(
+        self, user_id: UUID, title: str | None = None
+    ) -> dict:
         """Explicitly start a new conversation."""
         conv = Conversation(
             user_id=user_id,
-            title=title or f"New conversation {datetime.now(UTC).strftime('%b %d %H:%M')}",
+            title=title
+            or f"New conversation {datetime.now(UTC).strftime('%b %d %H:%M')}",
             status=ConversationStatus.ACTIVE,
         )
         self.db.add(conv)

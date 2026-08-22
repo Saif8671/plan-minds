@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ChatAPI, ChatMessage } from '../../../api/chat.api';
+import { queryClient } from '../../../providers/QueryProvider';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -41,6 +42,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: [...state.messages, response],
         isTyping: false 
       }));
+      
+      if (response.actionsTaken && response.actionsTaken.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['schedule'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      }
     } catch (error) {
       console.error('Failed to send message', error);
       set({ isTyping: false });

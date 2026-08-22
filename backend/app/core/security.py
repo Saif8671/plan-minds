@@ -25,11 +25,18 @@ def create_access_token(
     extra_claims: dict[str, Any] | None = None,
 ) -> str:
     import uuid
+
     now = datetime.now(UTC)
     expire = now + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    payload: dict[str, Any] = {"sub": str(subject), "iat": now, "exp": expire, "type": "access", "jti": str(uuid.uuid4())}
+    payload: dict[str, Any] = {
+        "sub": str(subject),
+        "iat": now,
+        "exp": expire,
+        "type": "access",
+        "jti": str(uuid.uuid4()),
+    }
     if extra_claims:
         payload.update(extra_claims)
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
@@ -37,9 +44,16 @@ def create_access_token(
 
 def create_refresh_token(subject: str | UUID) -> str:
     import uuid
+
     now = datetime.now(UTC)
     expire = now + timedelta(days=settings.refresh_token_expire_days)
-    payload = {"sub": str(subject), "iat": now, "exp": expire, "type": "refresh", "jti": str(uuid.uuid4())}
+    payload = {
+        "sub": str(subject),
+        "iat": now,
+        "exp": expire,
+        "type": "refresh",
+        "jti": str(uuid.uuid4()),
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 

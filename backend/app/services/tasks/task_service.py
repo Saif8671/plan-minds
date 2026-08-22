@@ -27,7 +27,7 @@ from app.models import (
 from app.repositories.activity_repository import ActivityLogRepository
 from app.repositories.reminder_repository import ReminderRepository
 from app.repositories.task_repository import TaskRepository
-from app.schemas.task import TaskCreate, TaskResponse, TaskSkipRequest, TaskUpdate
+from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from app.services.gamification.xp_service import GamificationService
 
 
@@ -88,7 +88,12 @@ class TaskService:
             setattr(task, field, value)
 
         # Spawn next recurring instance when task is newly completed
-        if task.completed and not was_completed and task.is_recurring and task.recurrence:
+        if (
+            task.completed
+            and not was_completed
+            and task.is_recurring
+            and task.recurrence
+        ):
             await self._handle_recurrence(user_id, task)
 
         task = await self.task_repo.update(task)

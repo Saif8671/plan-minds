@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.ai.router import router as ai_router
 from app.api.analytics.router import router as analytics_router
 from app.api.auth.router import router as auth_router
+from app.api.gamification.router import router as gamification_router
 from app.api.notifications.push_router import router as push_router
 from app.api.notifications.router import router as notifications_router
 from app.api.preferences.router import router as preferences_router
@@ -11,7 +12,6 @@ from app.api.routines.router import router as routines_router
 from app.api.schedule.router import router as schedule_router
 from app.api.tasks.router import router as tasks_router
 from app.api.users.router import router as users_router
-from app.api.gamification.router import router as gamification_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)

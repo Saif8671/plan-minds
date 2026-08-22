@@ -51,8 +51,9 @@ export const useAuthStore = create<AuthState>((set) => ({
           });
         } catch (err) {
           console.warn('Failed to fetch user profile during hydration', err);
-          // Token might be invalid or network error, fallback to unauthenticated or stored state
-          set({ isAuthenticated: true, user: { id: 'auth_user', email: '', name: 'User' }, hasCompletedOnboarding: onboardingStr === 'true' });
+          // Token might be invalid or network error, fallback to unauthenticated
+          await StorageService.clearTokens();
+          set({ isAuthenticated: false, user: null, hasCompletedOnboarding: onboardingStr === 'true' });
         }
       } else {
         set({ isAuthenticated: false, user: null });

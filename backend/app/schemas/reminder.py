@@ -16,6 +16,7 @@ class ReminderCreate(BaseModel):
 
 class ReminderCreateRecurring(BaseModel):
     """Create a recurring reminder that automatically re-fires on schedule."""
+
     title: str = Field(min_length=1, max_length=255)
     reminder_type: ReminderType = ReminderType.CUSTOM
     reminder_time: datetime

@@ -1,4 +1,3 @@
-import json
 import logging
 from uuid import UUID
 
@@ -23,9 +22,7 @@ class PushService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def subscribe(
-        self, user_id: UUID, push_token: str
-    ) -> PushSubscription:
+    async def subscribe(self, user_id: UUID, push_token: str) -> PushSubscription:
         # Check if exists
         result = await self.db.execute(
             select(PushSubscription).where(

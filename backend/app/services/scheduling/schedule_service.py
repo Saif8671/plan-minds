@@ -150,7 +150,11 @@ class ScheduleService:
         return await self._save_validated(schedule, generated)
 
     async def split_block(
-        self, user_id: UUID, schedule_id: UUID, block_id: str, data: ScheduleSplitRequest
+        self,
+        user_id: UUID,
+        schedule_id: UUID,
+        block_id: str,
+        data: ScheduleSplitRequest,
     ) -> ScheduleResponse:
         """Split a block at a given time, creating two contiguous blocks."""
         schedule, generated = await self._load_generated(user_id, schedule_id)
@@ -254,7 +258,9 @@ class ScheduleService:
 
         if not result.is_valid:
             raise ScheduleConflictError(
-                conflicts=[c.to_dict() for c in result.conflicts if c.severity == "error"]
+                conflicts=[
+                    c.to_dict() for c in result.conflicts if c.severity == "error"
+                ]
             )
 
         schedule.generated_schedule = generated.model_dump(mode="json")

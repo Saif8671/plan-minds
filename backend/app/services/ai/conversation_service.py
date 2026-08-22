@@ -1,11 +1,9 @@
 import uuid
-from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import NotFoundError
 from app.models import Conversation, ConversationMessage, ConversationState
 
 
@@ -13,7 +11,9 @@ class ConversationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_or_create_active_conversation(self, user_id: uuid.UUID) -> Conversation:
+    async def get_or_create_active_conversation(
+        self, user_id: uuid.UUID
+    ) -> Conversation:
         stmt = (
             select(Conversation)
             .where(Conversation.user_id == user_id)
@@ -30,7 +30,9 @@ class ConversationService:
 
         if not conv:
             conv = Conversation(user_id=user_id, title="Chat Session")
-            state = ConversationState(conversation=conv, current_state="DEFAULT", missing_fields={})
+            state = ConversationState(
+                conversation=conv, current_state="DEFAULT", missing_fields={}
+            )
             self.db.add(conv)
             self.db.add(state)
             await self.db.commit()
@@ -54,7 +56,9 @@ class ConversationService:
             c.status = "archived"
         await self.db.commit()
 
-    async def add_message(self, conversation_id: uuid.UUID, role: str, content: str) -> ConversationMessage:
+    async def add_message(
+        self, conversation_id: uuid.UUID, role: str, content: str
+    ) -> ConversationMessage:
         msg = ConversationMessage(
             conversation_id=conversation_id,
             role=role,
@@ -65,8 +69,12 @@ class ConversationService:
         await self.db.refresh(msg)
         return msg
 
-    async def update_state(self, conversation_id: uuid.UUID, current_state: str, missing_fields: dict) -> ConversationState:
-        stmt = select(ConversationState).where(ConversationState.conversation_id == conversation_id)
+    async def update_state(
+        self, conversation_id: uuid.UUID, current_state: str, missing_fields: dict
+    ) -> ConversationState:
+        stmt = select(ConversationState).where(
+            ConversationState.conversation_id == conversation_id
+        )
         result = await self.db.execute(stmt)
         state = result.scalar_one_or_none()
         if not state:

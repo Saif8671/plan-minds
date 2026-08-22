@@ -144,14 +144,19 @@ class AIRoutineParserService:
                     exc,
                 )
                 # Attempt partial recovery from truncated/malformed JSON
-                recovered = self._try_partial_recovery(content if "content" in dir() else "")
+                recovered = self._try_partial_recovery(
+                    content if "content" in dir() else ""
+                )
                 if recovered:
                     return recovered
 
             except Exception as exc:
                 last_error = exc
                 logger.warning(
-                    "AI parsing error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES, exc
+                    "AI parsing error (attempt %d/%d): %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    exc,
                 )
 
             if attempt < _MAX_RETRIES - 1:

@@ -115,7 +115,9 @@ class ReminderService:
         reminder.is_sent = False  # Will re-trigger after snooze_until
         reminder = await self.reminder_repo.update(reminder)
 
-        await self._record_history(reminder.id, datetime.now(UTC), ReminderOutcome.SNOOZED)
+        await self._record_history(
+            reminder.id, datetime.now(UTC), ReminderOutcome.SNOOZED
+        )
         return ReminderResponse.model_validate(reminder)
 
     async def complete_reminder(
@@ -126,7 +128,9 @@ class ReminderService:
         reminder.is_sent = True
         reminder = await self.reminder_repo.update(reminder)
 
-        await self._record_history(reminder.id, datetime.now(UTC), ReminderOutcome.DISMISSED)
+        await self._record_history(
+            reminder.id, datetime.now(UTC), ReminderOutcome.DISMISSED
+        )
         return ReminderResponse.model_validate(reminder)
 
     # ─── History ──────────────────────────────────────────────────────
@@ -165,7 +169,9 @@ class ReminderService:
                 data={"reminder_id": str(reminder.id)},
             )
         except Exception as exc:
-            logger.warning("Push notification failed for reminder %s: %s", reminder.id, exc)
+            logger.warning(
+                "Push notification failed for reminder %s: %s", reminder.id, exc
+            )
 
         # Create in-app notification
         notification = Notification(
@@ -210,7 +216,9 @@ class ReminderService:
         missed = result.scalars().all()
         count = 0
         for reminder in missed:
-            await self._record_history(reminder.id, reminder.reminder_time, ReminderOutcome.MISSED)
+            await self._record_history(
+                reminder.id, reminder.reminder_time, ReminderOutcome.MISSED
+            )
             reminder.is_sent = True  # Mark as processed so we don't detect it again
             await self.reminder_repo.update(reminder)
             count += 1
@@ -278,7 +286,11 @@ class ReminderService:
         return reminder
 
     async def _record_history(
-        self, reminder_id: UUID, fired_at: datetime, outcome: ReminderOutcome, notes: str | None = None
+        self,
+        reminder_id: UUID,
+        fired_at: datetime,
+        outcome: ReminderOutcome,
+        notes: str | None = None,
     ) -> None:
         history = ReminderHistory(
             reminder_id=reminder_id,

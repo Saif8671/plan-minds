@@ -66,6 +66,8 @@ export function useCompleteReminder() {
     mutationFn: (id: string) => RemindersAPI.completeReminder(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [REMINDERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['gamification'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to dismiss reminder'),
   });

@@ -32,9 +32,7 @@ class RoutineService:
         total = await self.routine_repo.count_by_user(user_id, active_only)
         return [RoutineResponse.model_validate(r) for r in routines], total
 
-    async def get_routine(
-        self, user_id: UUID, routine_id: UUID
-    ) -> RoutineResponse:
+    async def get_routine(self, user_id: UUID, routine_id: UUID) -> RoutineResponse:
         routine = await self.routine_repo.get_by_id_and_user(routine_id, user_id)
         if not routine:
             raise NotFoundError("Routine")

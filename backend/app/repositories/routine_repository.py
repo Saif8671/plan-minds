@@ -35,13 +35,9 @@ class RoutineRepository(BaseRepository[Routine]):
         )
         return result.scalar_one_or_none()
 
-    async def count_by_user(
-        self, user_id: UUID, active_only: bool = False
-    ) -> int:
+    async def count_by_user(self, user_id: UUID, active_only: bool = False) -> int:
         query = (
-            select(func.count())
-            .select_from(Routine)
-            .where(Routine.user_id == user_id)
+            select(func.count()).select_from(Routine).where(Routine.user_id == user_id)
         )
         if active_only:
             query = query.where(Routine.is_active.is_(True))

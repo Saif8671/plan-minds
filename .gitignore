@@ -1,0 +1,21 @@
+# Directories
+.idea/
+mobile/.idea/
+__pycache__/
+node_modules/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.expo/
+android/
+ios/
+
+# Files
+*.bak
+.env
+*.pyc
+*.pyo
+*.pyd
+
+# Misc
+.DS_Store

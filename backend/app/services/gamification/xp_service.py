@@ -6,13 +6,13 @@ permanently awarded if the entire request succeeds.
 """
 
 import math
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Task, TaskPriority, User, UserStats
+from app.models import Task, TaskOccurrence, TaskPriority, TaskStatus, User, UserStats
 
 
 class GamificationService:
@@ -85,10 +85,14 @@ class GamificationService:
         if stats.last_active_date:
             if stats.last_active_date == today - timedelta(days=1):
                 stats.streak_days += 1
+                if stats.streak_days > stats.longest_streak:
+                    stats.longest_streak = stats.streak_days
             elif stats.last_active_date < today - timedelta(days=1):
                 stats.streak_days = 1  # Streak broken
         else:
             stats.streak_days = 1
+            if stats.streak_days > stats.longest_streak:
+                stats.longest_streak = stats.streak_days
 
         stats.last_active_date = today
 
@@ -114,3 +118,75 @@ class GamificationService:
             "leveled_up": leveled_up,
             "current_level": stats.level,
         }
+
+    async def get_today_progress(self, user_id: UUID) -> int:
+        today = date.today()
+        stmt = select(func.count(TaskOccurrence.id)).where(
+            TaskOccurrence.user_id == user_id, TaskOccurrence.date == today
+        )
+        total_stmt = await self.db.execute(stmt)
+        total_tasks = total_stmt.scalar() or 0
+
+        if total_tasks == 0:
+            return 0
+
+        completed_stmt = select(func.count(TaskOccurrence.id)).where(
+            TaskOccurrence.user_id == user_id,
+            TaskOccurrence.date == today,
+            TaskOccurrence.status == TaskStatus.COMPLETED,
+        )
+        completed_result = await self.db.execute(completed_stmt)
+        completed_tasks = completed_result.scalar() or 0
+
+        return int((completed_tasks / total_tasks) * 100)
+
+    async def get_productivity_score(self, user_id: UUID) -> int:
+        today = date.today()
+        week_ago = today - timedelta(days=7)
+
+        stmt = select(
+            func.count(TaskOccurrence.id).label("total"),
+            func.sum(
+                case((TaskOccurrence.status == TaskStatus.COMPLETED, 1), else_=0)
+            ).label("completed"),
+        ).where(
+            TaskOccurrence.user_id == user_id,
+            TaskOccurrence.date >= week_ago,
+            TaskOccurrence.date <= today,
+        )
+        result = await self.db.execute(stmt)
+        row = result.first()
+        if not row or not row.total or row.total == 0:
+            return 0
+        return int((row.completed / row.total) * 100)
+
+    async def get_badges(self, stats: UserStats) -> list[dict]:
+        badges = []
+        if stats.level >= 5:
+            badges.append(
+                {
+                    "id": "level_5",
+                    "name": "Level 5 Achiever",
+                    "icon": "star",
+                    "description": "Reached Level 5",
+                }
+            )
+        if stats.streak_days >= 7:
+            badges.append(
+                {
+                    "id": "streak_7",
+                    "name": "7-Day Streak",
+                    "icon": "flame",
+                    "description": "Maintained a 7-day streak",
+                }
+            )
+        if stats.longest_streak >= 30:
+            badges.append(
+                {
+                    "id": "streak_30",
+                    "name": "30-Day Streak",
+                    "icon": "trophy",
+                    "description": "Maintained a 30-day streak",
+                }
+            )
+        return badges

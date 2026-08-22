@@ -34,9 +34,9 @@ async def list_routines(
     routines, total = await service.get_routines(
         current_user.id, skip, page_size, active_only
     )
-    return ApiResponse(data=PaginatedData(
-        items=routines, total=total, page=page, page_size=page_size
-    ))
+    return ApiResponse(
+        data=PaginatedData(items=routines, total=total, page=page, page_size=page_size)
+    )
 
 
 @router.get("/{routine_id}", response_model=ApiResponse[RoutineResponse])

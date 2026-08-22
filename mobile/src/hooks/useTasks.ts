@@ -22,6 +22,7 @@ export function useCreateTask() {
     mutationFn: (data: TaskCreate) => TasksAPI.createTask(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Task Created', 'Your new task has been added.');
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to create task'),
@@ -36,6 +37,7 @@ export function useUpdateTask() {
       TasksAPI.updateTask(taskId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to update task'),
   });
@@ -48,6 +50,8 @@ export function useDeleteTask() {
     mutationFn: (taskId: string) => TasksAPI.deleteTask(taskId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Task Deleted', 'The task has been removed.');
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to delete task'),
@@ -61,6 +65,8 @@ export function useStartTask() {
     mutationFn: (taskId: string) => TasksAPI.startTask(taskId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to start task'),
   });
@@ -75,6 +81,8 @@ export function useCompleteTask() {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: ['schedule'] });
       queryClient.invalidateQueries({ queryKey: ['gamification'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Task Completed', 'Great work! XP awarded.');
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to complete task'),
@@ -90,6 +98,8 @@ export function useSkipTask() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error) => ErrorHandler.handle(error, 'Failed to skip task'),
   });

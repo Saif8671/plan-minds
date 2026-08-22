@@ -56,7 +56,9 @@ class TaskOccurrenceUpdate(BaseModel):
 
 
 class TaskSkipRequest(BaseModel):
-    reason: str | None = Field(default=None, max_length=512, description="Optional reason for skipping")
+    reason: str | None = Field(
+        default=None, max_length=512, description="Optional reason for skipping"
+    )
 
 
 class TaskActivityCreate(BaseModel):
@@ -105,4 +107,3 @@ class TaskOccurrenceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     task: TaskResponse | None = None
-

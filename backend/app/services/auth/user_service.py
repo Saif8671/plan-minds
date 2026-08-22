@@ -47,9 +47,7 @@ class UserService:
         user.hashed_password = hash_password(new_password)
         await self.user_repo.update(user)
 
-    async def delete_account(
-        self, user_id: UUID, password: str | None = None
-    ) -> None:
+    async def delete_account(self, user_id: UUID, password: str | None = None) -> None:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             raise NotFoundError("User")

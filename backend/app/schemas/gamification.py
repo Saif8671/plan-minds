@@ -1,5 +1,5 @@
-from datetime import date
 from pydantic import BaseModel
+
 
 class UserStatsResponse(BaseModel):
     level: int
@@ -11,9 +11,9 @@ class UserStatsResponse(BaseModel):
     badges: list[dict]
     todayProgress: int
 
+
 class LeaderboardEntry(BaseModel):
     user_id: str
     name: str | None = None
     level: int
     xp: int
-

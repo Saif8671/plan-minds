@@ -1,26 +1,30 @@
 import logging
-from aiosmtplib import SMTP
 from email.message import EmailMessage
+
+from aiosmtplib import SMTP
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+
 class EmailService:
     @staticmethod
-    async def send_email(to_email: str, subject: str, body: str, is_html: bool = False) -> bool:
+    async def send_email(
+        to_email: str, subject: str, body: str, is_html: bool = False
+    ) -> bool:
         settings = get_settings()
-        
+
         message = EmailMessage()
         message["From"] = settings.smtp_from_email
         message["To"] = to_email
         message["Subject"] = subject
-        
+
         if is_html:
             message.add_alternative(body, subtype="html")
         else:
             message.set_content(body)
-            
+
         try:
             smtp_client = SMTP(
                 hostname=settings.smtp_hostname,

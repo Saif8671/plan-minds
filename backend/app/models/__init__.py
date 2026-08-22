@@ -145,7 +145,9 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     reset_otp: Mapped[str | None] = mapped_column(String(6))
-    reset_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reset_otp_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     schedules: Mapped[list["Schedule"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -246,6 +248,7 @@ class UserStats(Base):
     xp: Mapped[int] = mapped_column(Integer, default=0)
     level: Mapped[int] = mapped_column(Integer, default=1)
     streak_days: Mapped[int] = mapped_column(Integer, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, default=0)
     last_active_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -372,7 +375,7 @@ class Task(Base):
     fixed_start: Mapped[time | None] = mapped_column(Time)
     fixed_end: Mapped[time | None] = mapped_column(Time)
     is_recurring: Mapped[bool] = mapped_column(Boolean, default=False)
-    
+
     # Legacy columns restored for TaskService compatibility during Phase 12 stabilization
     duration: Mapped[int] = mapped_column(Integer, default=60)
     travel_time_minutes: Mapped[int] = mapped_column(Integer, default=0)
@@ -383,7 +386,9 @@ class Task(Base):
         default=TaskStatus.PENDING,
     )
     reminder_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    schedule_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("schedules.id", ondelete="SET NULL"), index=True)
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("schedules.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -461,7 +466,10 @@ class Reminder(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     task_occurrence_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("task_occurrences.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("task_occurrences.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     reminder_type: Mapped[ReminderType] = mapped_column(
@@ -478,7 +486,9 @@ class Reminder(Base):
     )
     recurrence_rule: Mapped[dict | None] = mapped_column(JSONB)
     # Pre-computed next fire time for recurring reminders (indexed for efficiency)
-    next_fire: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    next_fire: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     is_snoozed: Mapped[bool] = mapped_column(Boolean, default=False)
     snooze_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -489,7 +499,9 @@ class Reminder(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="reminders")
-    task_occurrence: Mapped[Optional["TaskOccurrence"]] = relationship(back_populates="reminders")
+    task_occurrence: Mapped[Optional["TaskOccurrence"]] = relationship(
+        back_populates="reminders"
+    )
     history: Mapped[list["ReminderHistory"]] = relationship(
         back_populates="reminder", cascade="all, delete-orphan"
     )
@@ -502,9 +514,7 @@ class ReminderHistory(Base):
     """Records every fire event for a reminder — sent, snoozed, dismissed, or missed."""
 
     __tablename__ = "reminder_history"
-    __table_args__ = (
-        Index("ix_reminder_history_reminder", "reminder_id", "fired_at"),
-    )
+    __table_args__ = (Index("ix_reminder_history_reminder", "reminder_id", "fired_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -515,9 +525,7 @@ class ReminderHistory(Base):
         index=True,
         nullable=False,
     )
-    fired_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     outcome: Mapped[ReminderOutcome] = mapped_column(
         Enum(ReminderOutcome, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
@@ -608,6 +616,9 @@ class Routine(Base):
     estimated_duration: Mapped[int] = mapped_column(Integer, default=60)
     preferred_time: Mapped[time | None] = mapped_column(Time)
     tags: Mapped[list | None] = mapped_column(JSONB, default=list)
+    days_of_week: Mapped[list | None] = mapped_column(JSONB, default=list)
+    start_time: Mapped[time | None] = mapped_column(Time)
+    end_time: Mapped[time | None] = mapped_column(Time)
     parsed_data: Mapped[dict | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -649,7 +660,11 @@ class AIAnalysis(Base):
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
     __table_args__ = (
-        Index("ix_activity_logs_task_occurrence_created", "task_occurrence_id", "created_at"),
+        Index(
+            "ix_activity_logs_task_occurrence_created",
+            "task_occurrence_id",
+            "created_at",
+        ),
         Index("ix_activity_logs_user", "user_id"),
     )
 
@@ -660,7 +675,9 @@ class ActivityLog(Base):
         UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), index=True
     )
     task_occurrence_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("task_occurrences.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True),
+        ForeignKey("task_occurrences.id", ondelete="CASCADE"),
+        index=True,
     )
     # Direct user_id allows analytics queries without joining tasks
     user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -680,7 +697,9 @@ class ActivityLog(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    task_occurrence: Mapped["TaskOccurrence"] = relationship(back_populates="activity_logs")
+    task_occurrence: Mapped["TaskOccurrence"] = relationship(
+        back_populates="activity_logs"
+    )
 
 
 # ─── Conversation ──────────────────────────────────────────────────────
@@ -769,6 +788,7 @@ class ConversationState(Base):
 
 
 # ─── RevokedToken ──────────────────────────────────────────────────────
+
 
 class RevokedToken(Base):
     __tablename__ = "revoked_tokens"

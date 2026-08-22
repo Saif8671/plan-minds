@@ -30,7 +30,9 @@ async def get_unread_count(current_user: CurrentUser, db: DbSession):
     return ApiResponse(data={"unread_count": count})
 
 
-@router.patch("/{notification_id}/read", response_model=ApiResponse[NotificationResponse])
+@router.patch(
+    "/{notification_id}/read", response_model=ApiResponse[NotificationResponse]
+)
 async def mark_as_read(
     notification_id: UUID,
     current_user: CurrentUser,

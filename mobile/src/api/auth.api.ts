@@ -5,24 +5,20 @@ import { useAuthStore } from '../store/authStore';
 
 export interface LoginRequest {
   email: string;
-  password?: string; // Optional if using magic link or OTP
+  password: string;
 }
 
 export interface RegisterRequest {
   email: string;
-  password?: string;
+  password: string;
   name: string;
 }
 
 export interface AuthResponse {
   data: {
-    user: {
-      id: string;
-      email: string;
-      name: string | null;
-    };
     access_token: string;
     refresh_token: string;
+    token_type: string;
   };
 }
 

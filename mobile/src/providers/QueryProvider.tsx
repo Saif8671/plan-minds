@@ -4,14 +4,19 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
       staleTime: 1000 * 60 * 5, // 5 minutes
       refetchOnWindowFocus: true,
       gcTime: 1000 * 60 * 60 * 24, // 24 hours (formerly cacheTime)
-      throwOnError: true,
+      throwOnError: (error: any) => {
+        if (error?.message === 'No refresh token' || error?.response?.status === 401) {
+          return false;
+        }
+        return true;
+      },
     },
   },
 });

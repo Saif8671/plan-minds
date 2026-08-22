@@ -28,7 +28,7 @@ export type ScheduleStackParamList = {
 
 export type CalendarStackParamList = {
   CalendarMain: undefined;
-  EventDetail: { eventId: string };
+  TaskDetail: { taskId: string };
 };
 
 export type MainTabParamList = {

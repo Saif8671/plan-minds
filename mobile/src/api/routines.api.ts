@@ -10,6 +10,11 @@ export interface RoutineCreate {
   start_time?: string;
   end_time?: string;
   category?: string;
+  priority?: string;
+  frequency?: string;
+  estimated_duration?: number;
+  preferred_time?: string;
+  tags?: string[];
   is_active?: boolean;
 }
 
@@ -20,6 +25,11 @@ export interface RoutineUpdate {
   start_time?: string;
   end_time?: string;
   category?: string;
+  priority?: string;
+  frequency?: string;
+  estimated_duration?: number;
+  preferred_time?: string;
+  tags?: string[];
   is_active?: boolean;
 }
 
@@ -31,6 +41,11 @@ export interface RoutineResponse {
   start_time?: string;
   end_time?: string;
   category?: string;
+  priority: string;
+  frequency?: string;
+  estimated_duration: number;
+  preferred_time?: string;
+  tags?: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;

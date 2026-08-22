@@ -60,20 +60,23 @@ class HabitService:
                 profile.preferred_study_hour = hour
             else:
                 profile.preferred_study_hour = round(
-                    self._ALPHA * hour + (1 - self._ALPHA) * profile.preferred_study_hour
+                    self._ALPHA * hour
+                    + (1 - self._ALPHA) * profile.preferred_study_hour
                 )
         elif completed_task.category == TaskCategory.HEALTH:
             if profile.preferred_workout_hour is None:
                 profile.preferred_workout_hour = hour
             else:
                 profile.preferred_workout_hour = round(
-                    self._ALPHA * hour + (1 - self._ALPHA) * profile.preferred_workout_hour
+                    self._ALPHA * hour
+                    + (1 - self._ALPHA) * profile.preferred_workout_hour
                 )
 
         # Average delay
         if delay_minutes is not None:
             profile.avg_delay_minutes = round(
-                self._ALPHA * delay_minutes + (1 - self._ALPHA) * profile.avg_delay_minutes
+                self._ALPHA * delay_minutes
+                + (1 - self._ALPHA) * profile.avg_delay_minutes
             )
 
         # Focus session length

@@ -1,0 +1,14 @@
+appId: com.planminds.app
+---
+- launchApp
+- assertVisible: "PlanMinds" # Assuming a splash/welcome screen with this text
+- tapOn: "Get Started"
+- assertVisible: "Login"
+- tapOn: "Email"
+- inputText: "test@example.com"
+- tapOn: "Password"
+- inputText: "testpass123"
+- tapOn: "Sign In"
+- assertVisible: "Dashboard" # Confirm login was successful
+- tapOn: "Schedule"
+- assertVisible: "Calendar"

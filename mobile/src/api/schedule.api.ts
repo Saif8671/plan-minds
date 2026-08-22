@@ -12,17 +12,28 @@ export interface ScheduleDay {
 
 export interface ScheduleResponse {
   id: string;
-  date: string;
+  user_id: string;
+  title: string;
+  description?: string;
+  priority: string;
+  start_time: string;
+  end_time: string;
   status: string;
-  title?: string;
+  category: string;
+  date?: string;
   generated_schedule?: any;
   created_at: string;
   updated_at: string;
 }
 
 export interface ScheduleCreate {
-  date: string;
-  title?: string;
+  title: string;
+  description?: string;
+  priority?: string;
+  start_time: string;
+  end_time: string;
+  status?: string;
+  category?: string;
 }
 
 export interface ScheduleUpdate {
@@ -57,7 +68,7 @@ export interface ScheduleGenerateRequest {
 
 export interface ScheduleGenerateMultiRequest {
   start_date: string;
-  num_days: number;
+  days: number;
   preferences?: Record<string, any>;
 }
 
@@ -258,12 +269,12 @@ export const ScheduleAPI = {
 
   mergeBlocks: async (
     scheduleId: string,
-    blockIdA: string,
-    blockIdB: string,
+    blockIds: string[],
+    mergedTitle?: string,
   ): Promise<ScheduleResponse> => {
     const response = await apiClient.post(
       `${ENDPOINTS.SCHEDULE.BASE}/${scheduleId}/blocks/merge`,
-      { block_id_a: blockIdA, block_id_b: blockIdB },
+      { block_ids: blockIds, merged_title: mergedTitle },
     );
     return response.data?.data || response.data;
   },

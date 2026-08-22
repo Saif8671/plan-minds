@@ -153,13 +153,18 @@ class AIAnalyzeService:
             except Exception as exc:
                 last_error = exc
                 logger.warning(
-                    "AI analysis error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES, exc
+                    "AI analysis error (attempt %d/%d): %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    exc,
                 )
 
             if attempt < _MAX_RETRIES - 1:
                 await asyncio.sleep(_RETRY_DELAYS[attempt])
 
-        logger.warning("All AI analysis attempts failed, using rule fallback: %s", last_error)
+        logger.warning(
+            "All AI analysis attempts failed, using rule fallback: %s", last_error
+        )
         return self._analyze_with_rules(data)
 
     # ─── Rule-based fallback ───────────────────────────────────────────
@@ -174,7 +179,9 @@ class AIAnalyzeService:
             tasks.append(
                 AIAnalyzeTask(
                     title=event["title"],
-                    start=start.strftime("%H:%M") if hasattr(start, "strftime") else str(start),
+                    start=start.strftime("%H:%M")
+                    if hasattr(start, "strftime")
+                    else str(start),
                     end=end.strftime("%H:%M") if hasattr(end, "strftime") else str(end),
                     category=event.get("category"),
                 )
@@ -194,8 +201,12 @@ class AIAnalyzeService:
         st = parsed.get("sleep_time")
         return AIAnalyzeResponse(
             tasks=tasks,
-            wake_time=wt.strftime("%H:%M") if wt and hasattr(wt, "strftime") else (str(wt) if wt else None),
-            sleep_time=st.strftime("%H:%M") if st and hasattr(st, "strftime") else (str(st) if st else None),
+            wake_time=wt.strftime("%H:%M")
+            if wt and hasattr(wt, "strftime")
+            else (str(wt) if wt else None),
+            sleep_time=st.strftime("%H:%M")
+            if st and hasattr(st, "strftime")
+            else (str(st) if st else None),
         )
 
     # ─── Persist tasks ─────────────────────────────────────────────────
@@ -226,7 +237,9 @@ class AIAnalyzeService:
                 category=category_val,
                 priority=priority_val,
                 is_recurring=t.is_recurring,
-                recurrence_rule={"rrule": t.recurrence_rule} if t.recurrence_rule else None,
+                recurrence_rule={"rrule": t.recurrence_rule}
+                if t.recurrence_rule
+                else None,
                 deadline=t.deadline,
             )
 

@@ -1,13 +1,10 @@
 from datetime import datetime, time
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 T = TypeVar("T")
-
-
-
 
 
 class TokenResponse(BaseModel):

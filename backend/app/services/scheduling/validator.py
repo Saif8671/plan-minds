@@ -9,7 +9,7 @@ Validation rules:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from typing import Any
 
 from app.schemas.schedule import GeneratedSchedule, ScheduleBlock
@@ -58,7 +58,9 @@ class ScheduleValidator:
         conflicts: list[ConflictDetail] = []
 
         conflicts.extend(cls._check_overlaps(blocks))
-        conflicts.extend(cls._check_sleep_boundary(blocks, schedule.wake_time, schedule.sleep_time))
+        conflicts.extend(
+            cls._check_sleep_boundary(blocks, schedule.wake_time, schedule.sleep_time)
+        )
         conflicts.extend(cls._check_duplicates(blocks))
         conflicts.extend(cls._check_buffer_time(blocks, buffer_minutes))
 

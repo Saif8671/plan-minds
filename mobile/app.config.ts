@@ -31,6 +31,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png',
   },
   extra: {
-    apiUrl: process.env.API_BASE_URL || 'http://localhost:8000/api/v1',
+    apiUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1',
   },
 });

@@ -73,11 +73,37 @@ function transformPeriodToAnalyticsData(raw: PeriodAnalytics): AnalyticsData {
 }
 
 export const AnalyticsAPI = {
-  /** Get weekly analytics (replaces the old hardcoded mock) */
+  /** Get analytics by combining weekly and dashboard data */
   getAnalytics: async (): Promise<AnalyticsData> => {
-    const response = await apiClient.get(ENDPOINTS.ANALYTICS.WEEKLY);
-    const raw: PeriodAnalytics = response.data?.data || response.data;
-    return transformPeriodToAnalyticsData(raw);
+    const [weeklyRes, dashboardRes] = await Promise.all([
+      apiClient.get(ENDPOINTS.ANALYTICS.WEEKLY),
+      apiClient.get(ENDPOINTS.ANALYTICS.DASHBOARD),
+    ]);
+    
+    const weekly: PeriodAnalytics = weeklyRes.data?.data || weeklyRes.data;
+    const dashboard = dashboardRes.data?.data || dashboardRes.data;
+    
+    const data = transformPeriodToAnalyticsData(weekly);
+    
+    // Add category breakdown from dashboard
+    if (dashboard?.category_breakdown) {
+      data.topCategories = dashboard.category_breakdown.map((c: any) => ({
+        name: c.category.charAt(0).toUpperCase() + c.category.slice(1),
+        value: Math.round((c.hours / (dashboard.study_hours + dashboard.focus_hours || 1)) * 100) || Math.round(c.hours),
+        color: CATEGORY_COLORS[c.category.charAt(0).toUpperCase() + c.category.slice(1)] || CATEGORY_COLORS.Other
+      })).sort((a: any, b: any) => b.value - a.value);
+      
+      // Re-calculate percentages so they add up to 100
+      const totalVal = data.topCategories.reduce((sum: number, c: any) => sum + c.value, 0);
+      if (totalVal > 0) {
+        data.topCategories = data.topCategories.map((c: any) => ({
+          ...c,
+          value: Math.round((c.value / totalVal) * 100)
+        }));
+      }
+    }
+    
+    return data;
   },
 
   getWeeklyAnalytics: async (): Promise<PeriodAnalytics> => {

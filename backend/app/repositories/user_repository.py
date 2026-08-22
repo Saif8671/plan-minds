@@ -1,11 +1,11 @@
 from uuid import UUID
 
+from cachetools import TTLCache
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User
 from app.repositories.base import BaseRepository
-from cachetools import TTLCache
 
 _user_cache = TTLCache(maxsize=100, ttl=300)
 
@@ -34,7 +34,7 @@ class UserRepository(BaseRepository[User]):
         cache_key = f"active_{user_id}"
         if cache_key in _user_cache:
             return _user_cache[cache_key]
-            
+
         result = await self.db.execute(
             select(User).where(User.id == user_id, User.is_active.is_(True))
         )
@@ -47,7 +47,7 @@ class UserRepository(BaseRepository[User]):
         cache_key = f"user_{id}"
         if cache_key in _user_cache:
             return _user_cache[cache_key]
-            
+
         user = await super().get_by_id(id)
         if user:
             _user_cache[cache_key] = user

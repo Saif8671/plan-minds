@@ -7,6 +7,30 @@ on:
     branches: [ "main" ]
 
 jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run Ruff Format Check
+        run: uv run ruff format --check .
+
+      - name: Run Ruff Linter
+        run: uv run ruff check .
+
   backend-test:
     runs-on: ubuntu-latest
     defaults:
@@ -16,17 +40,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.11"
-          cache: "pip"
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv sync
 
       - name: Run Pytest
-        run: pytest app/tests -v
+        run: uv run pytest app/tests -v
 
   mobile-typecheck:
     runs-on: ubuntu-latest

@@ -73,9 +73,97 @@ async def list_schedules(
     schedules, total = await service.get_schedules(
         current_user.id, skip, page_size, status
     )
-    return ApiResponse(data=PaginatedData(
-        items=schedules, total=total, page=page, page_size=page_size
-    ))
+    return ApiResponse(
+        data=PaginatedData(items=schedules, total=total, page=page, page_size=page_size)
+    )
+
+
+@router.get(
+    "/daily",
+    response_model=ApiResponse[ScheduleResponse],
+    responses={404: {"description": "No schedule found for the date"}},
+    summary="Get daily schedule",
+)
+async def get_daily_schedule(date: date, current_user: CurrentUser, db: DbSession):
+    """Return the active schedule for the given date, if one exists."""
+    engine = SchedulingEngine(db)
+    schedule = await engine.get_schedule_for_date(current_user.id, date)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="No schedule found for the date")
+    return ApiResponse(data=schedule)
+
+
+@router.get(
+    "/week/current",
+    response_model=ApiResponse[list[ScheduleResponse]],
+    summary="Get this week's schedules",
+)
+async def get_week_schedule(
+    current_user: CurrentUser,
+    db: DbSession,
+    start: date | None = Query(None, description="Week start date (defaults to today)"),
+):
+    """Return all schedules for the current week (7 days from start date)."""
+    engine = SchedulingEngine(db)
+    result = await engine.get_week(current_user.id, start)
+    return ApiResponse(data=result)
+
+
+# ─── AI-powered generation ─────────────────────────────────────────────
+
+
+@router.post(
+    "/generate",
+    response_model=ApiResponse[ScheduleResponse],
+    summary="Generate a daily schedule",
+)
+async def generate_schedule(
+    data: ScheduleGenerateRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Generate an optimised daily schedule using the scoring-based engine.
+
+    - Tasks are scored by priority, deadline urgency, preferred time, and energy level
+    - Meals, work/college blocks, and fixed tasks are placed first
+    - Flexible tasks fill remaining slots by highest score
+    - Returns conflict suggestions if the day is overpacked
+    """
+    engine = SchedulingEngine(db)
+    result = await engine.generate(current_user, data)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/generate/multi-day",
+    response_model=ApiResponse[list[ScheduleResponse]],
+    summary="Generate a multi-day schedule",
+)
+async def generate_multi_day_schedule(
+    data: ScheduleGenerateMultiRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Generate schedules for multiple consecutive days (2–14)."""
+    engine = SchedulingEngine(db)
+    result = await engine.generate_multi_day(current_user, data)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/regenerate",
+    response_model=ApiResponse[ScheduleResponse],
+    summary="Regenerate today's schedule",
+)
+async def regenerate_schedule(
+    data: ScheduleRegenerateRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Regenerate a schedule, optionally skipping specific tasks."""
+    engine = SchedulingEngine(db)
+    result = await engine.regenerate(current_user, data)
+    return ApiResponse(data=result)
 
 
 @router.get(
@@ -142,11 +230,15 @@ async def validate_schedule(
     schedule_id: UUID,
     current_user: CurrentUser,
     db: DbSession,
-    buffer_minutes: int = Query(5, ge=0, le=60, description="Minimum buffer between blocks (minutes)"),
+    buffer_minutes: int = Query(
+        5, ge=0, le=60, description="Minimum buffer between blocks (minutes)"
+    ),
 ):
     """Run all validation rules and return conflicts/warnings without saving."""
     service = ScheduleService(db)
-    result = await service.validate_schedule(current_user.id, schedule_id, buffer_minutes)
+    result = await service.validate_schedule(
+        current_user.id, schedule_id, buffer_minutes
+    )
     return ApiResponse(data=result)
 
 
@@ -264,96 +356,4 @@ async def delete_schedule_block(
     """Remove a block from the generated schedule."""
     service = ScheduleService(db)
     result = await service.delete_block(current_user.id, schedule_id, block_id)
-    return ApiResponse(data=result)
-
-
-# ─── AI-powered generation ─────────────────────────────────────────────
-
-
-@router.post(
-    "/generate",
-    response_model=ApiResponse[ScheduleResponse],
-    summary="Generate a daily schedule",
-)
-async def generate_schedule(
-    data: ScheduleGenerateRequest,
-    current_user: CurrentUser,
-    db: DbSession,
-):
-    """Generate an optimised daily schedule using the scoring-based engine.
-
-    - Tasks are scored by priority, deadline urgency, preferred time, and energy level
-    - Meals, work/college blocks, and fixed tasks are placed first
-    - Flexible tasks fill remaining slots by highest score
-    - Returns conflict suggestions if the day is overpacked
-    """
-    engine = SchedulingEngine(db)
-    result = await engine.generate(current_user, data)
-    return ApiResponse(data=result)
-
-
-@router.post(
-    "/generate/multi-day",
-    response_model=ApiResponse[list[ScheduleResponse]],
-    summary="Generate a multi-day schedule",
-)
-async def generate_multi_day_schedule(
-    data: ScheduleGenerateMultiRequest,
-    current_user: CurrentUser,
-    db: DbSession,
-):
-    """Generate schedules for multiple consecutive days (2–14)."""
-    engine = SchedulingEngine(db)
-    result = await engine.generate_multi_day(current_user, data)
-    return ApiResponse(data=result)
-
-
-@router.post(
-    "/regenerate",
-    response_model=ApiResponse[ScheduleResponse],
-    summary="Regenerate today's schedule",
-)
-async def regenerate_schedule(
-    data: ScheduleRegenerateRequest,
-    current_user: CurrentUser,
-    db: DbSession,
-):
-    """Regenerate a schedule, optionally skipping specific tasks."""
-    engine = SchedulingEngine(db)
-    result = await engine.regenerate(current_user, data)
-    return ApiResponse(data=result)
-
-
-@router.get(
-    "/daily",
-    response_model=ApiResponse[ScheduleResponse],
-    responses={404: {"description": "No schedule found for the date"}},
-    summary="Get daily schedule",
-)
-async def get_daily_schedule(
-    date: date,
-    current_user: CurrentUser,
-    db: DbSession
-):
-    """Return the active schedule for the given date, if one exists."""
-    engine = SchedulingEngine(db)
-    schedule = await engine.get_schedule_for_date(current_user.id, date)
-    if not schedule:
-        raise HTTPException(status_code=404, detail="No schedule found for the date")
-    return ApiResponse(data=schedule)
-
-
-@router.get(
-    "/week/current",
-    response_model=ApiResponse[list[ScheduleResponse]],
-    summary="Get this week's schedules",
-)
-async def get_week_schedule(
-    current_user: CurrentUser,
-    db: DbSession,
-    start: date | None = Query(None, description="Week start date (defaults to today)"),
-):
-    """Return all schedules for the current week (7 days from start date)."""
-    engine = SchedulingEngine(db)
-    result = await engine.get_week(current_user.id, start)
     return ApiResponse(data=result)

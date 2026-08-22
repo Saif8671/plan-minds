@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.preferences import UserPreferencesResponse, UserPreferencesUpdate
 from app.schemas.base import ApiResponse
+from app.schemas.preferences import UserPreferencesResponse, UserPreferencesUpdate
 from app.services.preferences import PreferencesService
 
 router = APIRouter(prefix="/users/me/preferences", tags=["User Preferences"])

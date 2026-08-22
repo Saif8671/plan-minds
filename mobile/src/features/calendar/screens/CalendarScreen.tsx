@@ -12,24 +12,24 @@ import { useDailySchedule } from '../../../hooks/useSchedule';
 export default function CalendarScreen() {
   const { colors, isDark } = useTheme();
   const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const { data: scheduleData } = useDailySchedule(currentDate);
+  const { data: scheduleData, isLoading } = useDailySchedule(currentDate);
 
   const onDateChanged = (date: string) => {
     setCurrentDate(date);
   };
 
   const events = {
-    [currentDate]: (scheduleData?.tasks || []).map((task) => {
-      const startTime = task.startTime || '09:00';
-      const endTime = task.endTime || '10:00';
+    [currentDate]: (scheduleData?.blocks || []).map((block: any) => {
+      const startTime = block.start || '09:00';
+      const endTime = block.end || '10:00';
       const formattedStart = startTime.length === 5 ? `${startTime}:00` : startTime;
       const formattedEnd = endTime.length === 5 ? `${endTime}:00` : endTime;
       return {
         start: `${currentDate} ${formattedStart}`,
         end: `${currentDate} ${formattedEnd}`,
-        title: task.title,
-        summary: task.description || '',
-        color: task.priority === 'high' ? colors.error : task.priority === 'medium' ? colors.warning : colors.primary,
+        title: block.title,
+        summary: block.category || '',
+        color: block.is_fixed ? colors.error : colors.primary,
       };
     }),
   };

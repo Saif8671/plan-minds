@@ -1,15 +1,14 @@
 """Test configuration — async database, HTTP client, and auth fixtures."""
 
-import asyncio
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.dialects.postgresql import JSONB
 
-from app.core.database import Base, get_db
 from app.core.config import get_settings
+from app.core.database import Base, get_db
 from main import app
 
 
@@ -57,6 +56,7 @@ async def db_session(init_db):
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def async_client(init_db):
     """Unauthenticated ASGI test client."""
+
     async def override_get_db():
         async with TestSessionLocal() as session:
             try:
@@ -100,12 +100,12 @@ async def authenticated_client(async_client):
 async def reset_redis():
     """Tear down and recreate the Redis client per test to avoid event loop issues."""
     import app.core.redis as redis_core
-    await redis_core.close_redis()
-    redis_core.redis_client = None
-    
-    await redis_core.init_redis()
-    yield
-    
+
     await redis_core.close_redis()
     redis_core.redis_client = None
 
+    await redis_core.init_redis()
+    yield
+
+    await redis_core.close_redis()
+    redis_core.redis_client = None

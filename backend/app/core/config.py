@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     environment: str = "production"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
+    run_scheduler: bool = True
 
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/schedule_organizer"
@@ -63,8 +64,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Optional integrations
-    redis_url: str = ""           # For Celery/caching (future use)
-    sentry_dsn: str = ""          # For error monitoring (Sentry)
+    redis_url: str = ""  # For Celery/caching (future use)
+    sentry_dsn: str = ""  # For error monitoring (Sentry)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -89,13 +90,42 @@ class Settings(BaseSettings):
             normalized = value.strip().lower()
             if normalized in {"1", "true", "yes", "on", "debug", "development", "dev"}:
                 return True
-            if normalized in {"0", "false", "no", "off", "release", "production", "prod"}:
+            if normalized in {
+                "0",
+                "false",
+                "no",
+                "off",
+                "release",
+                "production",
+                "prod",
+            }:
                 return False
         return bool(value)
 
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
+
+    @field_validator("secret_key", mode="after")
+    @classmethod
+    def validate_secret_key(cls, value: str, info) -> str:
+        env = info.data.get("environment", "production")
+        if env != "development" and value in {
+            "change-me-to-a-long-random-secret-key",
+            "dev-secret-key-placeholder",
+        }:
+            raise ValueError(
+                "SECRET_KEY must be changed from the default in production!"
+            )
+        return value
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def validate_database_url(cls, value: str, info) -> str:
+        env = info.data.get("environment", "production")
+        if env != "development" and not value:
+            raise ValueError("DATABASE_URL must be provided in production!")
+        return value
 
 
 @lru_cache

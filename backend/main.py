@@ -20,18 +20,48 @@ logger = get_logger(__name__)
 # ─── OpenAPI tags metadata ──────────────────────────────────────────────
 
 TAGS_METADATA = [
-    {"name": "Authentication", "description": "Register, login (email/password + Firebase), token refresh"},
+    {
+        "name": "Authentication",
+        "description": "Register, login (email/password + Firebase), token refresh",
+    },
     {"name": "Users", "description": "User profile management and account operations"},
-    {"name": "Preferences", "description": "Scheduling preferences, work hours, notification settings"},
-    {"name": "Tasks", "description": "Create, list, update, complete, skip, and delete tasks"},
-    {"name": "Schedules", "description": "AI-generated daily schedules, block editing, validation"},
-    {"name": "Routines", "description": "Store and manage recurring routine descriptions"},
-    {"name": "Reminders", "description": "One-time and recurring reminders with history"},
-    {"name": "Notifications", "description": "In-app notification inbox and push subscription management"},
+    {
+        "name": "Preferences",
+        "description": "Scheduling preferences, work hours, notification settings",
+    },
+    {
+        "name": "Tasks",
+        "description": "Create, list, update, complete, skip, and delete tasks",
+    },
+    {
+        "name": "Schedules",
+        "description": "AI-generated daily schedules, block editing, validation",
+    },
+    {
+        "name": "Routines",
+        "description": "Store and manage recurring routine descriptions",
+    },
+    {
+        "name": "Reminders",
+        "description": "One-time and recurring reminders with history",
+    },
+    {
+        "name": "Notifications",
+        "description": "In-app notification inbox and push subscription management",
+    },
     {"name": "Push", "description": "Web Push subscription management (VAPID)"},
-    {"name": "AI", "description": "Natural language routine parsing, schedule analysis, and AI chat assistant"},
-    {"name": "Analytics", "description": "Task completion analytics, focus hours, weekly/monthly reports"},
-    {"name": "Gamification", "description": "XP awards, level progression, streak tracking, leaderboard"},
+    {
+        "name": "AI",
+        "description": "Natural language routine parsing, schedule analysis, and AI chat assistant",
+    },
+    {
+        "name": "Analytics",
+        "description": "Task completion analytics, focus hours, weekly/monthly reports",
+    },
+    {
+        "name": "Gamification",
+        "description": "XP awards, level progression, streak tracking, leaderboard",
+    },
     {"name": "Health", "description": "Service health and readiness checks"},
 ]
 
@@ -48,9 +78,11 @@ async def lifespan(app: FastAPI):
         settings.app_version,
         settings.environment,
     )
-    start_scheduler()
+    if settings.run_scheduler:
+        start_scheduler()
     yield
-    stop_scheduler()
+    if settings.run_scheduler:
+        stop_scheduler()
     logger.info("Shutting down %s", settings.app_name)
 
 
@@ -111,7 +143,9 @@ async def request_logging_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
     return response
 
 
@@ -120,7 +154,8 @@ async def request_logging_middleware(request: Request, call_next):
 
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
-    from app.schemas.base import ApiResponse, ApiError
+    from app.schemas.base import ApiError, ApiResponse
+
     return JSONResponse(
         status_code=exc.status_code,
         content=ApiResponse(
@@ -135,7 +170,8 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    from app.schemas.base import ApiResponse, ApiError
+    from app.schemas.base import ApiError, ApiResponse
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ApiResponse(
@@ -151,7 +187,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    from app.schemas.base import ApiResponse, ApiError
+    from app.schemas.base import ApiError, ApiResponse
+
     return JSONResponse(
         status_code=500,
         content=ApiResponse(

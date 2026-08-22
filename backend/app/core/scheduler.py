@@ -136,7 +136,9 @@ async def check_snoozed_reminders() -> None:
                 try:
                     await service.process_fired_reminder(reminder)
                 except Exception as exc:
-                    logger.error("Failed to re-fire snoozed reminder %s: %s", reminder.id, exc)
+                    logger.error(
+                        "Failed to re-fire snoozed reminder %s: %s", reminder.id, exc
+                    )
 
             await db.commit()
             logger.info("Re-fired %d snoozed reminders", len(reminders))
@@ -209,7 +211,9 @@ async def cleanup_old_history() -> None:
             )
             await db.commit()
             if result.rowcount:
-                logger.info("Cleaned up %d old reminder history records", result.rowcount)
+                logger.info(
+                    "Cleaned up %d old reminder history records", result.rowcount
+                )
         except Exception as exc:
             await db.rollback()
             logger.error("cleanup_old_history job failed: %s", exc)

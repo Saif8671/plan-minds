@@ -51,7 +51,9 @@ class ConflictError(AppException):
 
 class ValidationError(AppException):
     def __init__(self, message: str, details: Any | None = None):
-        super().__init__(message, status_code=422, code="VALIDATION_ERROR", details=details)
+        super().__init__(
+            message, status_code=422, code="VALIDATION_ERROR", details=details
+        )
 
 
 class ExternalServiceError(AppException):

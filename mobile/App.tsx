@@ -35,11 +35,17 @@ const linking: LinkingOptions<RootStackParamList> = {
   },
 };
 
+import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { OfflineBanner } from './src/components/common/OfflineBanner';
+
 function AppContent() {
   const { isDark } = useTheme();
+  usePushNotifications();
+  
   return (
     <SafeAreaProvider>
       <NavigationContainer linking={linking}>
+        <OfflineBanner />
         <RootNavigator />
         <StatusBar style={isDark ? "light" : "dark"} />
         <ToastContainer />

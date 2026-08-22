@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.models import Reminder, ReminderOutcome, ReminderType, RecurrenceType
+from app.models import RecurrenceType, Reminder, ReminderType
 from app.services.reminders.reminder_service import ReminderService
 
 
@@ -51,7 +51,9 @@ async def test_compute_next_fire_weekly():
 @pytest.mark.asyncio
 async def test_compute_next_fire_with_interval():
     now = datetime(2026, 8, 9, 10, 0, tzinfo=UTC)
-    result = ReminderService._compute_next_fire(now, RecurrenceType.DAILY, {"interval": 3})
+    result = ReminderService._compute_next_fire(
+        now, RecurrenceType.DAILY, {"interval": 3}
+    )
     assert result == datetime(2026, 8, 12, 10, 0, tzinfo=UTC)
 
 
@@ -59,16 +61,24 @@ async def test_compute_next_fire_with_interval():
 async def test_process_fired_reminder_one_time():
     """One-time reminder: is_sent should be True after processing."""
     db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=lambda: []))))
+    db.execute = AsyncMock(
+        return_value=MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=lambda: []))
+        )
+    )
     db.add = MagicMock()
     db.flush = AsyncMock()
 
     service = ReminderService(db)
 
     # Patch push service
-    with patch.object(service.push_service, "send_push_notification", new_callable=AsyncMock):
+    with patch.object(
+        service.push_service, "send_push_notification", new_callable=AsyncMock
+    ):
         with patch.object(service, "_record_history", new_callable=AsyncMock):
-            with patch.object(service.reminder_repo, "update", new_callable=AsyncMock) as mock_update:
+            with patch.object(
+                service.reminder_repo, "update", new_callable=AsyncMock
+            ):
                 reminder = make_reminder(recurrence=None)
                 await service.process_fired_reminder(reminder)
                 assert reminder.is_sent is True
@@ -79,14 +89,20 @@ async def test_process_fired_reminder_one_time():
 async def test_process_fired_reminder_recurring():
     """Recurring reminder: next_fire should advance, is_sent should be False."""
     db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=lambda: []))))
+    db.execute = AsyncMock(
+        return_value=MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=lambda: []))
+        )
+    )
     db.add = MagicMock()
     db.flush = AsyncMock()
 
     service = ReminderService(db)
     now = datetime.now(UTC)
 
-    with patch.object(service.push_service, "send_push_notification", new_callable=AsyncMock):
+    with patch.object(
+        service.push_service, "send_push_notification", new_callable=AsyncMock
+    ):
         with patch.object(service, "_record_history", new_callable=AsyncMock):
             with patch.object(service.reminder_repo, "update", new_callable=AsyncMock):
                 reminder = make_reminder(

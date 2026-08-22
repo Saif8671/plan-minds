@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.deps import DbSession, _bearer, CurrentUser
+from app.api.deps import CurrentUser, DbSession, _bearer
+from app.core.rate_limit import limiter
 from app.schemas.auth import (
     FirebaseAuthRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ResetTokenResponse,
     TokenRefreshRequest,
     TokenResponse,
     UserLoginRequest,
     UserRegisterRequest,
     VerifyOTPRequest,
-    ResetTokenResponse,
 )
 from app.schemas.base import ApiResponse, MessageData
 from app.services.auth.auth_service import AuthService
-from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -48,7 +48,7 @@ async def firebase_login(request: Request, data: FirebaseAuthRequest, db: DbSess
 async def logout(
     db: DbSession,
     user: CurrentUser,
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer)
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
 ):
     if credentials and credentials.credentials:
         service = AuthService(db)

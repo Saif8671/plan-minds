@@ -1,11 +1,11 @@
 """AI API endpoints — routine parsing, analysis, chat assistant, suggestions."""
 
-from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.rate_limit import limiter
+from app.schemas.base import ApiResponse
 from app.schemas.schedule import (
     AIAnalyzeRequest,
     AIAnalyzeResponse,
@@ -14,7 +14,6 @@ from app.schemas.schedule import (
     ParsedRoutine,
     ParseRoutineRequest,
 )
-from app.schemas.base import ApiResponse
 from app.services.ai.analyze_service import AIAnalyzeService
 from app.services.ai.routine_parser import AIRoutineParserService
 from app.services.ai.scheduler_agent import AISchedulerAgent

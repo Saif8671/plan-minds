@@ -17,7 +17,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     db: DbSession,
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_bearer)
+    ] = None,
 ) -> User:
     """Validate the Bearer token and return the authenticated user.
 

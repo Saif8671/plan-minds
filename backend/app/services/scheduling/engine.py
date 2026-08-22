@@ -5,7 +5,6 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    RecurrenceType,
     Schedule,
     ScheduleStatus,
     Task,
@@ -20,20 +19,18 @@ from app.repositories.schedule_repository import ScheduleRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.schedule import (
     GeneratedSchedule,
-    ScheduleBlock,
-    ScheduleGenerateRequest,
     ScheduleGenerateMultiRequest,
+    ScheduleGenerateRequest,
     ScheduleRegenerateRequest,
     ScheduleResponse,
 )
 from app.services.scheduling.conflict_resolution import ConflictResolutionService
-
 from app.services.scheduling.pipeline import (
-    ScheduleContext,
-    MealScheduler,
-    WorkCollegeScheduler,
     FixedTaskScheduler,
     FlexibleTaskScheduler,
+    MealScheduler,
+    ScheduleContext,
+    WorkCollegeScheduler,
 )
 
 
@@ -48,11 +45,11 @@ class SchedulingEngine:
         self, user: User, data: ScheduleGenerateRequest
     ) -> ScheduleResponse:
         target_date = data.target_date or date.today()
-        
+
         # Load tasks and preferences concurrently
         tasks, prefs = await asyncio.gather(
             self.task_repo.get_pending_for_user(user.id),
-            self.prefs_repo.get_by_user(user.id)
+            self.prefs_repo.get_by_user(user.id),
         )
 
         if data.include_parsed_routine:
@@ -84,39 +81,49 @@ class SchedulingEngine:
         self, user: User, data: ScheduleGenerateMultiRequest
     ) -> list[ScheduleResponse]:
         start_date = data.start_date or date.today()
-        
+
         # Load tasks and preferences concurrently
         tasks, prefs = await asyncio.gather(
             self.task_repo.get_pending_for_user(user.id),
-            self.prefs_repo.get_by_user(user.id)
+            self.prefs_repo.get_by_user(user.id),
         )
         wake = user.wake_time or time(6, 0)
         sleep = user.sleep_time or time(23, 0)
         break_duration = 15
-        
+
         if prefs:
             wake = prefs.wake_time or wake
             sleep = prefs.sleep_time or sleep
             break_duration = prefs.break_duration_minutes or break_duration
-            
+
         responses = []
-        
+
         for i in range(data.days):
             current_date = start_date + timedelta(days=i)
-            
+
             generated = self._build_schedule(
                 tasks, current_date, wake, sleep, break_duration, prefs
             )
             resp = await self._persist_schedule(user.id, current_date, generated)
             responses.append(resp)
-            
+
             # Remove successfully placed non-recurring flexible tasks so they aren't scheduled again tomorrow
             placed_task_ids = {
-                b.task_id for b in generated.blocks 
-                if b.task_id and not getattr(next((t for t in tasks if t.id == b.task_id), None), 'is_recurring', False)
+                b.task_id
+                for b in generated.blocks
+                if b.task_id
+                and not getattr(
+                    next((t for t in tasks if t.id == b.task_id), None),
+                    "is_recurring",
+                    False,
+                )
             }
-            
-            tasks = [t for t in tasks if getattr(t, 'is_recurring', False) or t.id not in placed_task_ids]
+
+            tasks = [
+                t
+                for t in tasks
+                if getattr(t, "is_recurring", False) or t.id not in placed_task_ids
+            ]
 
         return responses
 
@@ -135,7 +142,9 @@ class SchedulingEngine:
             user, ScheduleGenerateRequest(target_date=target_date)
         )
 
-    async def get_schedule_for_date(self, user_id: UUID, target_date: date) -> ScheduleResponse | None:
+    async def get_schedule_for_date(
+        self, user_id: UUID, target_date: date
+    ) -> ScheduleResponse | None:
         schedule = await self.schedule_repo.get_by_user_and_date(user_id, target_date)
         if not schedule:
             return None
@@ -161,14 +170,14 @@ class SchedulingEngine:
         prefs: UserPreferences | None = None,
     ) -> GeneratedSchedule:
         context = ScheduleContext(target_date, wake, sleep, prefs)
-        
+
         pipeline = [
             MealScheduler(),
             WorkCollegeScheduler(),
             FixedTaskScheduler(),
             FlexibleTaskScheduler(),
         ]
-        
+
         for component in pipeline:
             component.process(context, tasks)
 
@@ -184,9 +193,9 @@ class SchedulingEngine:
                 "break_duration": break_duration,
             },
         )
-        
+
         generated.suggestions = ConflictResolutionService.analyze_schedule(generated)
-        
+
         return generated
 
     def _time_in_range(self, t: time, start: time, end: time) -> bool:

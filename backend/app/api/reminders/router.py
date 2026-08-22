@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession
+from app.schemas.base import ApiResponse
 from app.schemas.reminder import (
     ReminderCreate,
     ReminderCreateRecurring,
@@ -13,7 +14,6 @@ from app.schemas.reminder import (
     ReminderSnoozeRequest,
     ReminderUpdate,
 )
-from app.schemas.base import ApiResponse
 from app.services.reminders.reminder_service import ReminderService
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
@@ -73,7 +73,12 @@ async def generate_from_schedule(
     """Auto-create reminders 10 minutes before each block in a generated schedule."""
     service = ReminderService(db)
     count = await service.generate_schedule_reminders(schedule_id)
-    return ApiResponse(data={"created": count, "message": f"Created {count} reminder(s) from schedule blocks"})
+    return ApiResponse(
+        data={
+            "created": count,
+            "message": f"Created {count} reminder(s) from schedule blocks",
+        }
+    )
 
 
 @router.get(
